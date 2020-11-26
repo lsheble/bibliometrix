@@ -121,35 +121,28 @@ library('bibliometrix')
 
 ## Data loading and converting
 
-The export file can be read by R using the function *readFiles*:
+The export file can be read and converted using by R using the function *convert2df*:
+
+**convert2df**(*file*, *dbsource*, *format*)
+
+The argument *file* is a character vector containing the name of export files downloaded from SCOPUS, Clarivate Analytics WOS, Digital Science Dimenions, PubMed or Cochrane CDSR website. *file* can also contains the name of a json/xlm object download using  Digital Science Dimenions or PubMed APIs (through the packages *dimensionsR* and *pubmedR*.
+
+es. file <- c("file1.txt","file2.txt", ...)
 
 
-```{r Data loading}
+```{r Data loading and Converting}
 ## An example from bibliometrix vignettes
 
-D <- readFiles("https://www.bibliometrix.org/datasets/savedrecs.bib")
-```
+file <- "https://www.bibliometrix.org/datasets/savedrecs.bib"
 
-D is a large character vector. 
-*readFiles* argument contains the name of files downloaded from SCOPUS, Clarivate Analytics WOS, or Cochrane CDSR website.
-
-The function *readFiles* combines all the text files onto a single large character vector. Furthermore, the format is converted into UTF-8.
-
-es. D <- readFiles("file1.txt","file2.txt", ...)
-
-
-The object D can be converted in a  data frame using the function *convert2df*:
-
-
-```{r Data converting}
-M <- convert2df(D, dbsource = "isi", format = "bibtex")
+M <- convert2df(file = file, dbsource = "isi", format = "bibtex")
 ```
 
 *convert2df* creates a bibliographic data frame with cases corresponding to manuscripts and variables to Field Tag in the original export file.
 
 Each manuscript contains several elements, such as authors' names, title, keywords and other information. All these elements constitute the bibliographic attributes of a document, also called metadata.
 
-Data frame columns are named using the standard Clarivate Analytics WoS Field Tag codify [(http://www.bibliometrix.org/documents/Field_Tags_bibliometrix.pdf)](http://www.bibliometrix.org/documents/Field_Tags_bibliometrix.pdf). 
+Data frame columns are named using the standard Clarivate Analytics WoS Field Tag codify [(https://www.bibliometrix.org/documents/Field_Tags_bibliometrix.pdf)](https://www.bibliometrix.org/documents/Field_Tags_bibliometrix.pdf). 
 
 
 
@@ -324,10 +317,10 @@ Aria, M. & Cuccurullo, C. (2017).  *bibliometrix*: An R-tool for comprehensive s
 Cuccurullo, C., Aria, M., & Sarto, F. (2016). Foundations and trends in performance management. A twenty-five years bibliometric analysis in business and public administration domains, *Scientometrics*, DOI: 10.1007/s11192-016-1948-8 (https://doi.org/10.1007/s11192-016-1948-8).
 
 
-Cuccurullo, C., Aria, M., & Sarto, F.  (2015). Twenty years of research on performance management in business and public administration domains. Presentation at the *Correspondence Analysis and Related Methods conference (CARME 2015)* in September 2015 (http://www.bibliometrix.org/documents/2015Carme_cuccurulloetal.pdf).
+Cuccurullo, C., Aria, M., & Sarto, F.  (2015). Twenty years of research on performance management in business and public administration domains. Presentation at the *Correspondence Analysis and Related Methods conference (CARME 2015)* in September 2015 (https://www.bibliometrix.org/documents/2015Carme_cuccurulloetal.pdf).
 
 
-Sarto, F., Cuccurullo, C., & Aria, M. (2014). Exploring healthcare governance literature: systematic review and paths for future research. *Mecosan* (http://www.francoangeli.it/Riviste/Scheda_Rivista.aspx?IDarticolo=52780&lingua=en).
+Sarto, F., Cuccurullo, C., & Aria, M. (2014). Exploring healthcare governance literature: systematic review and paths for future research. *Mecosan* (https://www.francoangeli.it/Riviste/Scheda_Rivista.aspx?IDarticolo=52780&lingua=en).
 
 
 Cuccurullo, C., Aria, M., & Sarto, F. (2013). Twenty years of research on performance management in business and public administration domains. In *Academy of Management Proceedings* (Vol. 2013, No. 1, p. 14270). Academy of Management (https://doi.org/10.5465/AMBPP.2013.14270abstract).

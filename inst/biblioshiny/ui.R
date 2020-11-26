@@ -1,8 +1,6 @@
 ## BIBLIOSHINY: A SHINY APP FOR BIBLIOMETRIX R-PACKAGE
 if (!(require(bibliometrix))){install.packages("bibliometrix"); require(bibliometrix, quietly=TRUE)}
 if (!(require(shiny))){install.packages("shiny"); require(shiny, quietly=TRUE)} 
-#if (!(require(shinyFiles))){install.packages("shiny"); require(shinyFiles, quietly=TRUE)} 
-#if (!(require(fs))){install.packages("shiny"); require(fs, quietly=TRUE)} 
 if (!(require(rio))){install.packages("rio")} 
 if (!(require(DT))){install.packages("DT")} 
 if (!(require(ggplot2))){install.packages("ggplot2"); require(ggplot2, quietly=TRUE)} 
@@ -10,12 +8,14 @@ if (!(require(shinycssloaders))){install.packages("shinycssloaders")}
 if (!(require(shinythemes))){install.packages("shinythemes")} 
 if (!(require(wordcloud2))){install.packages("wordcloud2")} 
 if (!require(colourpicker)){install.packages("colourpicker")}
-if (!require(treemap)){install.packages("treemap")}
+#if (!require(treemap)){install.packages("treemap")}
 if (!require(ggmap)){install.packages("ggmap"); require(ggmap, quietly=TRUE)}
 if (!require(maps)){install.packages("maps"); require(maps, quietly=TRUE)}
 if (!require(visNetwork)){install.packages("visNetwork"); require(visNetwork, quietly=TRUE)}
 if (!require(plotly)){install.packages("plotly"); require(plotly, quietly=TRUE)}
 require(Matrix, quietly = TRUE)
+require(dimensionsR, quietly = TRUE)
+require(pubmedR, quietly = TRUE)
 
 # Main NavBar ----
 options(spinner.size=1, spinner.type=5)
@@ -25,6 +25,17 @@ ui <-  navbarPage("biblioshiny for bibliometrix",
                   
 ### WELCOME PAGE ----
                   tabPanel("Welcome",
+                           
+                           # code for ggplot plot resize
+                           tags$head(tags$script('$(document).on("shiny:connected", function(e) {
+                            Shiny.onInputChange("innerWidth", window.innerWidth);
+                            });
+                            $(window).resize(function(e) {
+                            Shiny.onInputChange("innerWidth", window.innerWidth);
+                            });
+                            ')),
+                           # end of code
+                           
                            fluidRow(
                              column(9,
                                     wellPanel(
@@ -78,99 +89,256 @@ ui <-  navbarPage("biblioshiny for bibliometrix",
 ),
 
 ### Loading page ----
-
-tabPanel(
-  "Data", 
-  sidebarLayout(
-    sidebarPanel(width=3,
-                 h3(em(strong("Import or Load "))),
-                 br(),
-                 selectInput("load", 
-                             label = "Please, choose what to do",
-                             choices = c(" "="null",
-                                         "Import raw file(s)"="import", 
-                                         "Load bibliometrix file(s)"="load"),
-                             selected = "null"),
-                 #br(),
-     conditionalPanel(condition = "input.load == 'import'",
-                  selectInput("dbsource", 
-                  label = "Database",
-                  choices = c("Web of Science (WoS/WoK)"="isi", 
-                              "Scopus"="scopus",
-                              "Dimensions"="dimensions"),
-                  selected = "isi")),
-      conditionalPanel(condition = "input.dbsource == 'isi' & input.load == 'import'",
-                       selectInput("format", 
-                                   label = "File format",
-                                   choices = c("Plain Text"="plaintext", 
-                                               "BibTeX"="bibtex"),
-                                   selected = "plaintext")),
-      conditionalPanel(condition = "input.dbsource == 'dimensions' & input.load == 'import'",
-                       selectInput("format", 
-                                   label = "File format",
-                                   choices = c("Excel (Topic Analysis)"="excel",
-                                               "CSV (bibliometric mapping)"="csv"),
-                                   selected = "excel")),
-      
-     
-     conditionalPanel(condition = "input.load != 'null'",
-     fileInput("file1", "Choose a file",
-                multiple = FALSE,
-                accept = c(
-                  ".csv",
-                  ".txt",
-                  ".bib",
-                  ".xlsx",
-                  ".zip",
-                  ".xls",
-                  ".rdata",
-                  ".rda",
-                  ".rds")
-      )),
-      #h6("Here accept single .txt/.bib/.csv/.xslx/.RData files, or multiple .txt/.bib/.csv files compressed in a single .zip archive."),
-     conditionalPanel(condition = "input.load != 'null'",
-                      actionButton("applyLoad", "Start ")),
-      tags$hr(),
-      
-      uiOutput("textLog"),
-      #shinycssloaders::withSpinner(verbatimTextOutput("log")),
-      
-      tags$hr(),
-      
-      h3(em(strong("Export a bibliometrix file "))),
-      br(),
-     
-      ### download xlsx
-     #  selectInput('save_file', 'Save as:', choices = c(' ' ='null',
-     #                                                   'Excel/R format' = 'xlsx'),
-     #              selected = 'null'),
-     # ### prova
-     # conditionalPanel(condition = "input.save_file != 'null'",
-     # shinySaveButton("save", "Save file", "Save file as ...", filetype=list(xlsx="xlsx", RData="RData")))#,
-     # 
-     # ###FINE PROVA
-     ### download xlsx
-     selectInput('save_file', 'Save as:', choices = c(' ' ='null',
-                                                      'Excel' = 'xlsx',
-                                                      'R Data Format' = 'RData'),
-                 selected = 'null'),
-     conditionalPanel(condition = "input.save_file != 'null'",
-                      downloadButton("collection.save", "Export"))
-     ),
-     mainPanel(
-      ## color of datatable
-      tags$head(tags$style(HTML("table.dataTable.hover tbody tr:hover, table.dataTable.display tbody tr:hover {
+### DATASET MENU ----
+navbarMenu("Data",
+           "  ",
+           "  ",
+           ### Import or Load files ####
+           tabPanel("Import or Load files",
+                    sidebarLayout(
+                      sidebarPanel(
+                        width = 3,
+                        h3(em(strong("Import or Load "))),
+                        br(),
+                        selectInput(
+                          "load",
+                          label = "Please, choose what to do",
+                          choices = c(
+                            " " = "null",
+                            "Import raw file(s)" = "import",
+                            "Load bibliometrix file(s)" = "load"
+                          ),
+                          selected = "null"
+                        ),
+                        #br(),
+                        conditionalPanel(
+                          condition = "input.load == 'import'",
+                          selectInput(
+                            "dbsource",
+                            label = "Database",
+                            choices = c(
+                              "Web of Science (WoS/WoK)" = "isi",
+                              "Scopus" = "scopus",
+                              "Dimensions" = "dimensions",
+                              "PubMed" = "pubmed",
+                              "Cochrane Library" = "cochrane"
+                            ),
+                            selected = "isi"
+                          )
+                        ),
+                        conditionalPanel(
+                          condition = "input.dbsource == 'isi' & input.load == 'import'",
+                          selectInput(
+                            "format",
+                            label = "File format",
+                            choices = c("Plain Text" = "plaintext",
+                                        "EndNote Desktop" = "endnote",
+                                        "BibTeX" = "bibtex"),
+                            selected = "plaintext"
+                          )
+                        ),
+                        conditionalPanel(
+                          condition = "input.dbsource == 'cochrane' & input.load == 'import'",
+                          selectInput(
+                            "format",
+                            label = "File format",
+                            choices = c("Plain Text" = "plaintext"),
+                            selected = "plaintext"
+                          )
+                        ),
+                        conditionalPanel(
+                          condition = "input.dbsource == 'scopus' & input.load == 'import'",
+                          selectInput(
+                            "format",
+                            label = "File format",
+                            choices = c("BibTeX" = "bibtex",
+                                        "CSV" = "csv"),
+                            selected = "bibtex"
+                          )
+                        ),
+                        conditionalPanel(
+                          condition = "input.dbsource == 'dimensions' & input.load == 'import'",
+                          selectInput(
+                            "format",
+                            label = "File format",
+                            choices = c(
+                              "Excel (Topic Analysis)" = "excel",
+                              "CSV (bibliometric mapping)" =
+                                "csv"
+                            ),
+                            selected = "excel"
+                          )
+                        ),
+                        conditionalPanel(
+                          condition = "input.dbsource == 'pubmed' & input.load == 'import'",
+                          selectInput(
+                            "format",
+                            label = "File format",
+                            choices = c(
+                              "PubMed txt format" = "pubmed"
+                            ),
+                            selected = "pubmed"
+                          )
+                        ),
+                        
+                        
+                        conditionalPanel(
+                          condition = "input.load != 'null'",
+                          fileInput(
+                            "file1",
+                            "Choose a file",
+                            multiple = FALSE,
+                            accept = c(
+                              ".csv",
+                              ".txt",
+                              ".ciw",
+                              ".bib",
+                              ".xlsx",
+                              ".zip",
+                              ".xls",
+                              ".rdata",
+                              ".rda",
+                              ".rds"
+                            )
+                          )
+                        ),
+                        #h6("Here accept single .txt/.bib/.csv/.xslx/.RData files, or multiple .txt/.bib/.csv files compressed in a single .zip archive."),
+                        conditionalPanel(condition = "input.load != 'null'",
+                                         actionButton("applyLoad", "Start ")),
+                        tags$hr(),
+                        
+                        uiOutput("textLog"),
+                        #shinycssloaders::withSpinner(verbatimTextOutput("log")),
+                        
+                        tags$hr(),
+                        
+                        h3(em(strong(
+                          "Export a bibliometrix file "
+                        ))),
+                        br(),
+                        
+                        selectInput(
+                          'save_file',
+                          'Save as:',
+                          choices = c(
+                            ' ' = 'null',
+                            'Excel' = 'xlsx',
+                            'R Data Format' = 'RData'
+                          ),
+                          selected = 'null'
+                        ),
+                        conditionalPanel(condition = "input.save_file != 'null'",
+                                         downloadButton("collection.save", "Export"))
+                      ),
+                      mainPanel(
+                        ## color of datatable
+                        tags$head(tags$style(
+                          HTML(
+                            "table.dataTable.hover tbody tr:hover, table.dataTable.display tbody tr:hover {
                                   background-color: #9c4242 !important;
                                   }
-                                  "))),
-      tags$style(HTML(".dataTables_wrapper .dataTables_length, .dataTables_wrapper .dataTables_filter, .dataTables_wrapper .dataTables_info, .dataTables_wrapper .dataTables_processing,.dataTables_wrapper .dataTables_paginate .paginate_button, .dataTables_wrapper .dataTables_paginate .paginate_button.disabled {
+                                  "
+                          )
+                        )),
+                        tags$style(
+                          HTML(
+                            ".dataTables_wrapper .dataTables_length, .dataTables_wrapper .dataTables_filter, .dataTables_wrapper .dataTables_info, .dataTables_wrapper .dataTables_processing,.dataTables_wrapper .dataTables_paginate .paginate_button, .dataTables_wrapper .dataTables_paginate .paginate_button.disabled {
                   color: #000000 !important;
-                  }")),
-      #shinycssloaders::withSpinner(tableOutput("contents"))
-      shinycssloaders::withSpinner(DT::DTOutput("contents"))
-    )
-  )
-),
+                  }"
+                          )
+                        ),
+                        shinycssloaders::withSpinner(DT::DTOutput("contents"))
+                      )
+                    )),
+           tabPanel("Gather data using APIs",
+                    sidebarLayout(
+                      sidebarPanel(
+                        width = 3,
+                        h3(em(strong(
+                          "Gather data using APIs "
+                        ))),
+                        br(),
+                        
+                        selectInput(
+                          "dbapi",
+                          label = "Database",
+                          choices = c("DS Dimensions" = "ds",
+                                      "PubMed" = "pubmed"),
+                          selected = "pubmed"
+                        ),
+                        ### Dimenions API ####
+                        conditionalPanel(
+                          condition = "input.dbapi == 'ds'",
+                          br(),
+                          actionButton("dsShow",  h5(strong("1.  Configure API request"))),
+
+                          h5(tags$b("Your Query")),
+                          verbatimTextOutput("queryLog2", placeholder = FALSE),
+                          h5(tags$b("Documents returned using your query")),
+                          verbatimTextOutput("sampleLog2", placeholder = FALSE),
+                          # 
+                          # 
+                          # uiOutput("sliderLimit"),
+                          
+                          
+                        ),
+                        ### Pubmed API ####
+                        conditionalPanel(
+                          condition = "input.dbapi == 'pubmed'",
+                          br(),
+                          actionButton("pmShow", h5(strong("1.  Configure API request"))),
+
+                          h5(tags$b("Your Query")),
+                          verbatimTextOutput("pmQueryLog2", placeholder = FALSE),
+                          h5(tags$b("Documents returned using your query")),
+                          verbatimTextOutput("pmSampleLog2", placeholder = FALSE),
+                          
+                        ),
+                        tags$hr(),
+                        #h4(em(strong("Gather metadata"))),
+                        actionButton("apiApply", h5(strong("2.  Download metadata"))),
+                        tags$hr(),
+                        
+                        h3(em(strong(
+                          "Export a bibliometrix file "
+                        ))),
+                        br(),
+                        
+                        selectInput(
+                          'save_file_api',
+                          'Save as:',
+                          choices = c(
+                            ' ' = 'null',
+                            'Excel' = 'xlsx',
+                            'R Data Format' = 'RData'
+                          ),
+                          selected = 'null'
+                        ),
+                        conditionalPanel(condition = "input.save_file_api != 'null'",
+                                         downloadButton("collection.save_api", "Export"))
+                      ),
+                      mainPanel(
+                        ## color of datatable
+                        tags$head(tags$style(
+                          HTML(
+                            "table.dataTable.hover tbody tr:hover, table.dataTable.display tbody tr:hover {
+                                  background-color: #9c4242 !important;
+                                  }
+                                  "
+                          )
+                        )),
+                        tags$style(
+                          HTML(
+                            ".dataTables_wrapper .dataTables_length, .dataTables_wrapper .dataTables_filter, .dataTables_wrapper .dataTables_info, .dataTables_wrapper .dataTables_processing,.dataTables_wrapper .dataTables_paginate .paginate_button, .dataTables_wrapper .dataTables_paginate .paginate_button.disabled {
+                  color: #000000 !important;
+                  }"
+                          )
+                        ),
+                        #shinycssloaders::withSpinner(tableOutput("contents"))
+                        shinycssloaders::withSpinner(DT::DTOutput("apiContents"))
+                      )
+                    ))
+), 
 
 
 ### Filters page ----
@@ -180,6 +348,9 @@ tabPanel(
                       sidebarPanel(width=3,
                                    h3(em(strong("Filter "))),
                                    br(),
+                                   actionButton("applyFilter", "Apply!"),
+                                   "  ",
+                                   "  ",
                                    uiOutput("textDim"),
                                    uiOutput("selectType"),
                                    uiOutput("sliderPY"),
@@ -208,7 +379,7 @@ navbarMenu("Dataset",
                                    h3(em(strong("Main Information about the collection "))),
                                    br()),
                       mainPanel(
-                        shinycssloaders::withSpinner(DT::DTOutput(outputId = "MainInfo"))
+                        shinycssloaders::withSpinner(DT::DTOutput(outputId = "MainInfo", width = 500))
                     )
            )),
            tabPanel("Annual Scientific Production",
@@ -219,13 +390,32 @@ navbarMenu("Dataset",
                                    h3(em(strong("Annual Scientific Production "))),
                                    "  ",
                                    br(),
-                                   verbatimTextOutput("CAGR")
-                                   #uiOutput("textCAGR")
+                                   verbatimTextOutput("CAGR"),
+                                   br(),
+                                   br(),
+                                   br(),
+                                   selectInput(
+                                     'ASPdpi',
+                                     h4(em(strong(
+                                       "Export plot"
+                                     ))),
+                                     choices=c(
+                                       "Please select a dpi value" = "null",
+                                       "75 dpi" = "75",
+                                       "150 dpi" = "150",
+                                       "300 dpi" = "300",
+                                       "600 dpi" = "600"
+                                     ),
+                                     selected = "null"
+                                   ),
+                                   conditionalPanel(condition = "input.ASPdpi != 'null'",
+                                                    downloadButton("ASPplot.save", "Export plot as png"))
+                                   
                                    ),
                       mainPanel(
                         tabsetPanel(type = "tabs",
                                     tabPanel("Plot",
-                                             shinycssloaders::withSpinner(plotlyOutput(outputId = "AnnualProdPlot", height = 700))
+                                             shinycssloaders::withSpinner(plotlyOutput(outputId = "AnnualProdPlot", height = "80vh")) #height = 700))
                                     ),
                                     tabPanel("Table",
                                              shinycssloaders::withSpinner(DT::DTOutput("AnnualProdTable"))
@@ -239,12 +429,30 @@ navbarMenu("Dataset",
                                    "  ",
                                    "  ",
                                    h3(em(strong("Average Citations per Year "))),
-                                   "  "
+                                   br(),
+                                   br(),
+                                   br(),
+                                   selectInput(
+                                     'ACpYdpi',
+                                     h4(em(strong(
+                                       "Export plot"
+                                     ))),
+                                     choices=c(
+                                       "Please select a dpi value" = "null",
+                                       "75 dpi" = "75",
+                                       "150 dpi" = "150",
+                                       "300 dpi" = "300",
+                                       "600 dpi" = "600"
+                                     ),
+                                     selected = "null"
+                                   ),
+                                   conditionalPanel(condition = "input.ACpYdpi != 'null'",
+                                                    downloadButton("ACpYplot.save", "Export plot as png"))
                       ),
                       mainPanel(
                         tabsetPanel(type = "tabs",
                                     tabPanel("Plot",
-                                             shinycssloaders::withSpinner(plotlyOutput(outputId = "AnnualTotCitperYearPlot", height = 700))
+                                             shinycssloaders::withSpinner(plotlyOutput(outputId = "AnnualTotCitperYearPlot", height = "80vh")) #height = 700))
                                     ),
                                     tabPanel("Table",
                                              shinycssloaders::withSpinner(DT::DTOutput("AnnualTotCitperYearTable"))
@@ -312,7 +520,7 @@ navbarMenu("Dataset",
                                    ),
                       mainPanel(
                         #tabPanel("Plot",
-                                 shinycssloaders::withSpinner(networkD3::sankeyNetworkOutput(outputId = "ThreeFielsPlot",height = "600px"))
+                                 shinycssloaders::withSpinner(networkD3::sankeyNetworkOutput(outputId = "ThreeFielsPlot",height = "80vh")) #height = "600px"))
                         #            )
                       )
                     )
@@ -328,17 +536,39 @@ navbarMenu("Sources",
                     sidebarLayout(
                       sidebarPanel(width=3,
                                    h3(em(strong("Most Relevant Sources "))),
-                                   br(),
+                                   br(),            
+                                   actionButton("applyMRSources", "Apply!"),
+                                   "  ",
+                                   "  ",
                                    h4(em(strong("Graphical Parameters: "))),
                                    "  ",
                                    numericInput("MostRelSourcesK", 
                                                 label=("Number of Sources"), 
-                                                value = 20)
+                                                value = 20),
+                                   br(),
+                                   br(),
+                                   br(),
+                                   selectInput(
+                                     'MRSdpi',
+                                     h4(em(strong(
+                                       "Export plot"
+                                     ))),
+                                     choices=c(
+                                       "Please select a dpi value" = "null",
+                                       "75 dpi" = "75",
+                                       "150 dpi" = "150",
+                                       "300 dpi" = "300",
+                                       "600 dpi" = "600"
+                                     ),
+                                     selected = "null"
+                                   ),
+                                   conditionalPanel(condition = "input.MRSdpi != 'null'",
+                                                    downloadButton("MRSplot.save", "Export plot as png"))
                                    ),
                       mainPanel(
                         tabsetPanel(type = "tabs",
                                     tabPanel("Plot",
-                                             shinycssloaders::withSpinner(plotlyOutput(outputId = "MostRelSourcesPlot",height = 700))
+                                             shinycssloaders::withSpinner(plotlyOutput(outputId = "MostRelSourcesPlot", height = "80vh")) #height = 700))
                                     ),
                                     tabPanel("Table",
                                               shinycssloaders::withSpinner(DT::DTOutput("MostRelSourcesTable"))
@@ -352,16 +582,38 @@ navbarMenu("Sources",
                       sidebarPanel(width=3,
                                    h3(em(strong("Most Local Cited Sources (from Reference Lists)"))),
                                    br(),
+                                   actionButton("applyMLCSources", "Apply!"),
+                                   "  ",
+                                   "  ",
                                    h4(em(strong("Graphical Parameters: "))),
                                    "  ",
                                    numericInput("MostRelCitSourcesK", 
                                                 label=("Number of Sources"), 
-                                                value = 20)
+                                                value = 20),
+                                   br(),
+                                   br(),
+                                   br(),
+                                   selectInput(
+                                     'MLCSdpi',
+                                     h4(em(strong(
+                                       "Export plot"
+                                     ))),
+                                     choices=c(
+                                       "Please select a dpi value" = "null",
+                                       "75 dpi" = "75",
+                                       "150 dpi" = "150",
+                                       "300 dpi" = "300",
+                                       "600 dpi" = "600"
+                                     ),
+                                     selected = "null"
+                                   ),
+                                   conditionalPanel(condition = "input.MLCSdpi != 'null'",
+                                                    downloadButton("MLCSplot.save", "Export plot as png"))
                       ),
                       mainPanel(
                         tabsetPanel(type = "tabs",
                                     tabPanel("Plot",
-                                             shinycssloaders::withSpinner(plotlyOutput(outputId = "MostRelCitSourcesPlot",height = 700))
+                                             shinycssloaders::withSpinner(plotlyOutput(outputId = "MostRelCitSourcesPlot", height = "80vh")) #height = 700))
                                     ),
                                     tabPanel("Table",
                                              shinycssloaders::withSpinner(DT::DTOutput("MostRelCitSourcesTable"))
@@ -376,12 +628,30 @@ navbarMenu("Sources",
                       sidebarPanel(width=3,
                                    h3(em(strong("Source clustering"))),
                                    h4(em(strong("through Bradford's Law "))),
-                                   br()            
+                                   br(),
+                                   br(),
+                                   br(),
+                                   selectInput(
+                                     'BLdpi',
+                                     h4(em(strong(
+                                       "Export plot"
+                                     ))),
+                                     choices=c(
+                                       "Please select a dpi value" = "null",
+                                       "75 dpi" = "75",
+                                       "150 dpi" = "150",
+                                       "300 dpi" = "300",
+                                       "600 dpi" = "600"
+                                     ),
+                                     selected = "null"
+                                   ),
+                                   conditionalPanel(condition = "input.BLdpi != 'null'",
+                                                    downloadButton("BLplot.save", "Export plot as png"))           
                       ),
                       mainPanel(
                         tabsetPanel(type = "tabs",
                                     tabPanel("Plot",
-                                             shinycssloaders::withSpinner(plotlyOutput(outputId = "bradfordPlot", height = 700))
+                                             shinycssloaders::withSpinner(plotlyOutput(outputId = "bradfordPlot", height = "80vh")) #height = 700))
                                     ),
                                     tabPanel("Table",
                                              shinycssloaders::withSpinner(DT::DTOutput("bradfordTable"))
@@ -394,7 +664,7 @@ navbarMenu("Sources",
            tabPanel("Source Impact",
                     sidebarLayout(
                       sidebarPanel(width=3,
-                                   h3(em(strong("Source Impact"))),
+                                   h3(em(strong("Source Local Impact"))),
                                    br(),            
                                    actionButton("applyHsource", "Apply!"),
                                    "  ",
@@ -411,13 +681,32 @@ navbarMenu("Sources",
                                    "  ",
                                    numericInput("Hksource", 
                                                 label=("Number of sources"), 
-                                                value = 20)
+                                                value = 20),
+                                   br(),
+                                   br(),
+                                   br(),
+                                   selectInput(
+                                     'SIdpi',
+                                     h4(em(strong(
+                                       "Export plot"
+                                     ))),
+                                     choices=c(
+                                       "Please select a dpi value" = "null",
+                                       "75 dpi" = "75",
+                                       "150 dpi" = "150",
+                                       "300 dpi" = "300",
+                                       "600 dpi" = "600"
+                                     ),
+                                     selected = "null"
+                                   ),
+                                   conditionalPanel(condition = "input.SIdpi != 'null'",
+                                                    downloadButton("SIplot.save", "Export plot as png"))           
                       ),
                       mainPanel(
                         
                         tabsetPanel(type = "tabs",
                                     tabPanel("Plot",
-                                             shinycssloaders::withSpinner(plotlyOutput(outputId = "SourceHindexPlot", height = 700))
+                                             shinycssloaders::withSpinner(plotlyOutput(outputId = "SourceHindexPlot", height = "80vh")) #height = 700))
                                     ),
                                     tabPanel("Table",
                                              shinycssloaders::withSpinner(DT::DTOutput(outputId = "SourceHindexTable"))
@@ -433,7 +722,10 @@ navbarMenu("Sources",
                       # Sidebar with a slider and selection inputs
                       sidebarPanel(width=3,
                                    h3(em(strong("Source Dynamics"))),
-                                   br(),   
+                                   br(),            
+                                   actionButton("applySOGrowth", "Apply!"),
+                                   br(),
+                                   "  ",  
                                    selectInput("cumSO", "Occurrences",
                                                choices = c("Cumulate" = "Cum",
                                                            "Per year" = "noCum"),
@@ -443,9 +735,26 @@ navbarMenu("Sources",
                                                            "No" = "No"),
                                                selected = "No"),
                                    hr(),
-                                   sliderInput("topSO", label = "Number of Sources", min = 1, max = 50, step = 1, value = 5)
-                                   
-                                   #uiOutput("sliderKwYears")
+                                   sliderInput("topSO", label = "Number of Sources", min = 1, max = 50, step = 1, value = 5),
+                                   br(),
+                                   br(),
+                                   br(),
+                                   selectInput(
+                                     'SDdpi',
+                                     h4(em(strong(
+                                       "Export plot"
+                                     ))),
+                                     choices=c(
+                                       "Please select a dpi value" = "null",
+                                       "75 dpi" = "75",
+                                       "150 dpi" = "150",
+                                       "300 dpi" = "300",
+                                       "600 dpi" = "600"
+                                     ),
+                                     selected = "null"
+                                   ),
+                                   conditionalPanel(condition = "input.SDdpi != 'null'",
+                                                    downloadButton("SDplot.save", "Export plot as png"))       
                       ),
                       
                       # 
@@ -472,7 +781,10 @@ navbarMenu("Authors",
                     sidebarLayout(
                       sidebarPanel(width=3,
                                    h3(em(strong("Most Relevant Authors"))),
+                                   br(),            
+                                   actionButton("applyMRAuthors", "Apply!"),
                                    br(),
+                                   "  ", 
                                    h4(em(strong("Graphical Parameters: "))),
                                    "  ",
                                    numericInput("MostRelAuthorsK", 
@@ -484,12 +796,31 @@ navbarMenu("Authors",
                                                choices = c("N. of Documents "="t", 
                                                            "Percentage"="p",
                                                            "Fractionalized Frequency"="f"),
-                                               selected = "t")
+                                               selected = "t"),
+                                   br(),
+                                   br(),
+                                   br(),
+                                   selectInput(
+                                     'MRAdpi',
+                                     h4(em(strong(
+                                       "Export plot"
+                                     ))),
+                                     choices=c(
+                                       "Please select a dpi value" = "null",
+                                       "75 dpi" = "75",
+                                       "150 dpi" = "150",
+                                       "300 dpi" = "300",
+                                       "600 dpi" = "600"
+                                     ),
+                                     selected = "null"
+                                   ),
+                                   conditionalPanel(condition = "input.MRAdpi != 'null'",
+                                                    downloadButton("MRAplot.save", "Export plot as png"))    
                       ),
                       mainPanel(
                         tabsetPanel(type = "tabs",
                                     tabPanel("Plot",
-                                             shinycssloaders::withSpinner(plotlyOutput(outputId = "MostRelAuthorsPlot", height = 700))
+                                             shinycssloaders::withSpinner(plotlyOutput(outputId = "MostRelAuthorsPlot", height = "80vh")) #height = 700))
                                     ),
                                     tabPanel("Table",
                                              shinycssloaders::withSpinner(DT::DTOutput("MostRelAuthorsTable"))
@@ -503,17 +834,39 @@ navbarMenu("Authors",
                     sidebarLayout(
                       sidebarPanel(width=3,
                                    h3(em(strong("Most Local Cited Authors"))),
+                                   br(),            
+                                   actionButton("applyMLCAuthors", "Apply!"),
                                    br(),
+                                   "  ", 
                                    h4(em(strong("Graphical Parameters: "))),
                                    "  ",
                                    numericInput("MostCitAuthorsK", 
                                                 label=("Number of Authors"), 
-                                                value = 20)
+                                                value = 20),
+                                   br(),
+                                   br(),
+                                   br(),
+                                   selectInput(
+                                     'MLCAdpi',
+                                     h4(em(strong(
+                                       "Export plot"
+                                     ))),
+                                     choices=c(
+                                       "Please select a dpi value" = "null",
+                                       "75 dpi" = "75",
+                                       "150 dpi" = "150",
+                                       "300 dpi" = "300",
+                                       "600 dpi" = "600"
+                                     ),
+                                     selected = "null"
+                                   ),
+                                   conditionalPanel(condition = "input.MLCAdpi != 'null'",
+                                                    downloadButton("MLCAplot.save", "Export plot as png"))   
                       ),
                       mainPanel(
                         tabsetPanel(type = "tabs",
                                     tabPanel("Plot",
-                                             shinycssloaders::withSpinner(plotlyOutput(outputId = "MostCitAuthorsPlot", height = 700))
+                                             shinycssloaders::withSpinner(plotlyOutput(outputId = "MostCitAuthorsPlot", height = "80vh")) #height = 700))
                                     ),
                                     tabPanel("Table",
                                              shinycssloaders::withSpinner(DT::DTOutput("MostCitAuthorsTable"))
@@ -528,11 +881,33 @@ navbarMenu("Authors",
                       sidebarPanel(width=3,
                                    h3(em(strong("Authors' Production over Time"))),
                                    br(),
+                                   actionButton("applyAUoverTime", "Apply!"),
+                                   br(),
+                                   "  ",
                                    h4(em(strong("Graphical Parameters: "))),
                                    "  ",
                                    numericInput("TopAuthorsProdK", 
                                                 label=("Number of Authors"), 
-                                                value = 20)
+                                                value = 20),
+                                   br(),
+                                   br(),
+                                   br(),
+                                   selectInput(
+                                     'APOTdpi',
+                                     h4(em(strong(
+                                       "Export plot"
+                                     ))),
+                                     choices=c(
+                                       "Please select a dpi value" = "null",
+                                       "75 dpi" = "75",
+                                       "150 dpi" = "150",
+                                       "300 dpi" = "300",
+                                       "600 dpi" = "600"
+                                     ),
+                                     selected = "null"
+                                   ),
+                                   conditionalPanel(condition = "input.APOTdpi != 'null'",
+                                                    downloadButton("APOTplot.save", "Export plot as png"))   
                       ),
                       mainPanel(
                         tabsetPanel(type = "tabs",
@@ -557,12 +932,30 @@ navbarMenu("Authors",
                       sidebarPanel(width=3,
                                    h3(em(strong("Author Productivity"))),
                                    h4(em(strong("through Lotka's Law"))),
-                                   br()         
+                                   br(),
+                                   br(),
+                                   br(),
+                                   selectInput(
+                                     'LLdpi',
+                                     h4(em(strong(
+                                       "Export plot"
+                                     ))),
+                                     choices=c(
+                                       "Please select a dpi value" = "null",
+                                       "75 dpi" = "75",
+                                       "150 dpi" = "150",
+                                       "300 dpi" = "300",
+                                       "600 dpi" = "600"
+                                     ),
+                                     selected = "null"
+                                   ),
+                                   conditionalPanel(condition = "input.LLdpi != 'null'",
+                                                    downloadButton("LLplot.save", "Export plot as png"))   
                       ),
                       mainPanel(
                         tabsetPanel(type = "tabs",
                                     tabPanel("Plot",
-                                             shinycssloaders::withSpinner(plotlyOutput(outputId = "lotkaPlot", height = 700))
+                                             shinycssloaders::withSpinner(plotlyOutput(outputId = "lotkaPlot", height = "80vh")) #height = 700))
                                     ),
                                     tabPanel("Table",
                                              shinycssloaders::withSpinner(DT::DTOutput("lotkaTable"))
@@ -575,10 +968,10 @@ navbarMenu("Authors",
            tabPanel("Author Impact",
                     sidebarLayout(
                       sidebarPanel(width=3,
-                                   h3(em(strong("Author Impact"))),
+                                   h3(em(strong("Author Local Impact"))),
                                    br(),
-                                   actionButton("applyHauthor", "Apply!"),
-                                   "  ",
+                                   actionButton("applyHAuthors", "Apply!"),
+                                   br(),
                                    "  ",
                                    h4(em(strong("Graphical Parameters: "))),
                                    "  ",
@@ -592,13 +985,32 @@ navbarMenu("Authors",
                                    "  ",
                                    numericInput("Hkauthor", 
                                                 label=("Number of authors"), 
-                                                value = 20)
+                                                value = 20),
+                                   br(),
+                                   br(),
+                                   br(),
+                                   selectInput(
+                                     'AIdpi',
+                                     h4(em(strong(
+                                       "Export plot"
+                                     ))),
+                                     choices=c(
+                                       "Please select a dpi value" = "null",
+                                       "75 dpi" = "75",
+                                       "150 dpi" = "150",
+                                       "300 dpi" = "300",
+                                       "600 dpi" = "600"
+                                     ),
+                                     selected = "null"
+                                   ),
+                                   conditionalPanel(condition = "input.AIdpi != 'null'",
+                                                    downloadButton("AIplot.save", "Export plot as png"))   
                       ),
                       mainPanel(
                         
                         tabsetPanel(type = "tabs",
                                     tabPanel("Plot",
-                                             shinycssloaders::withSpinner(plotlyOutput(outputId = "AuthorHindexPlot", height = 700))
+                                             shinycssloaders::withSpinner(plotlyOutput(outputId = "AuthorHindexPlot", height = "80vh")) #height = 700))
                                     ),
                                     tabPanel("Table",
                                              shinycssloaders::withSpinner(DT::DTOutput(outputId = "AuthorHindexTable"))
@@ -616,6 +1028,8 @@ navbarMenu("Authors",
                       sidebarPanel(width=3,
                                    h3(em(strong("Most Relevant Affiliations"))),
                                    br(),
+                                   actionButton("applyMRAffiliations", "Apply!"),
+                                   br(),
                                    "  ",
                                    selectInput("disAff", 
                                                label = "Affiliation Name Disambiguation",
@@ -627,12 +1041,31 @@ navbarMenu("Authors",
                                    "  ",
                                    numericInput("MostRelAffiliationsK", 
                                                 label=("Number of Affiliations"), 
-                                                value = 20)
+                                                value = 20),
+                                   br(),
+                                   br(),
+                                   br(),
+                                   selectInput(
+                                     'AFFdpi',
+                                     h4(em(strong(
+                                       "Export plot"
+                                     ))),
+                                     choices=c(
+                                       "Please select a dpi value" = "null",
+                                       "75 dpi" = "75",
+                                       "150 dpi" = "150",
+                                       "300 dpi" = "300",
+                                       "600 dpi" = "600"
+                                     ),
+                                     selected = "null"
+                                   ),
+                                   conditionalPanel(condition = "input.AFFdpi != 'null'",
+                                                    downloadButton("AFFplot.save", "Export plot as png"))  
                       ),
                       mainPanel(
                         tabsetPanel(type = "tabs",
                                     tabPanel("Plot",
-                                             shinycssloaders::withSpinner(plotlyOutput(outputId = "MostRelAffiliationsPlot", height = 700))
+                                             shinycssloaders::withSpinner(plotlyOutput(outputId = "MostRelAffiliationsPlot", height = "80vh")) #height = 700))
                                     ),
                                     tabPanel("Table",
                                              shinycssloaders::withSpinner(DT::DTOutput("MostRelAffiliationsTable"))
@@ -649,16 +1082,38 @@ navbarMenu("Authors",
                       sidebarPanel(width=3,
                                    h3(em(strong("Corresponding Author's Country"))),
                                    br(),
+                                   actionButton("applyCAUCountries", "Apply!"),
+                                   br(),
+                                   "  ",
                                    h4(em(strong("Graphical Parameters: "))),
                                    "  ",
                                    numericInput("MostRelCountriesK", 
                                                 label=("Number of Countries"), 
-                                                value = 20)
+                                                value = 20),
+                                   br(),
+                                   br(),
+                                   br(),
+                                   selectInput(
+                                     'MRCOdpi',
+                                     h4(em(strong(
+                                       "Export plot"
+                                     ))),
+                                     choices=c(
+                                       "Please select a dpi value" = "null",
+                                       "75 dpi" = "75",
+                                       "150 dpi" = "150",
+                                       "300 dpi" = "300",
+                                       "600 dpi" = "600"
+                                     ),
+                                     selected = "null"
+                                   ),
+                                   conditionalPanel(condition = "input.MRCOdpi != 'null'",
+                                                    downloadButton("MRCOplot.save", "Export plot as png"))  
                       ),
                       mainPanel(
                         tabsetPanel(type = "tabs",
                                     tabPanel("Plot",
-                                             shinycssloaders::withSpinner(plotlyOutput(outputId = "MostRelCountriesPlot", height = 700))
+                                             shinycssloaders::withSpinner(plotlyOutput(outputId = "MostRelCountriesPlot", height = "80vh")) #height = 700))
                                     ),
                                     tabPanel("Table",
                                              shinycssloaders::withSpinner(DT::DTOutput("MostRelCountriesTable"))
@@ -672,12 +1127,30 @@ navbarMenu("Authors",
                     sidebarLayout(
                       sidebarPanel(width=3,
                                    h3(em(strong("Country Scientific Production"))),
-                                   br()
+                                   br(),
+                                   br(),
+                                   br(),
+                                   selectInput(
+                                     'CSPdpi',
+                                     h4(em(strong(
+                                       "Export plot"
+                                     ))),
+                                     choices=c(
+                                       "Please select a dpi value" = "null",
+                                       "75 dpi" = "75",
+                                       "150 dpi" = "150",
+                                       "300 dpi" = "300",
+                                       "600 dpi" = "600"
+                                     ),
+                                     selected = "null"
+                                   ),
+                                   conditionalPanel(condition = "input.CSPdpi != 'null'",
+                                                    downloadButton("CSPplot.save", "Export plot as png"))  
                       ),
                       mainPanel(
                         tabsetPanel(type = "tabs",
                                     tabPanel("Plot",
-                                             shinycssloaders::withSpinner(plotlyOutput(outputId = "countryProdPlot", height = 700))
+                                             shinycssloaders::withSpinner(plotlyOutput(outputId = "countryProdPlot", height = "80vh"))  #height = 700))
                                     ),
                                     tabPanel("Table",
                                              shinycssloaders::withSpinner(DT::DTOutput("countryProdTable"))
@@ -692,6 +1165,9 @@ navbarMenu("Authors",
                       sidebarPanel(width=3,
                                    h3(em(strong("Most Cited Countries"))),
                                    br(),
+                                   actionButton("applyMCCountries", "Apply!"),
+                                   br(),
+                                   "  ",
                                    h4(em(strong("Graphical Parameters: "))),
                                    "  ",
                                    selectInput("CitCountriesMeasure", 
@@ -702,12 +1178,31 @@ navbarMenu("Authors",
                                    "  ",
                                    numericInput("MostCitCountriesK", 
                                                 label=("Number of Countries"), 
-                                                value = 20)
+                                                value = 20),
+                                   br(),
+                                   br(),
+                                   br(),
+                                   selectInput(
+                                     'MCCdpi',
+                                     h4(em(strong(
+                                       "Export plot"
+                                     ))),
+                                     choices=c(
+                                       "Please select a dpi value" = "null",
+                                       "75 dpi" = "75",
+                                       "150 dpi" = "150",
+                                       "300 dpi" = "300",
+                                       "600 dpi" = "600"
+                                     ),
+                                     selected = "null"
+                                   ),
+                                   conditionalPanel(condition = "input.MCCdpi != 'null'",
+                                                    downloadButton("MCCplot.save", "Export plot as png"))  
                       ),
                       mainPanel(
                         tabsetPanel(type = "tabs",
                                     tabPanel("Plot",
-                                             shinycssloaders::withSpinner(plotlyOutput(outputId = "MostCitCountriesPlot", height = 700))
+                                             shinycssloaders::withSpinner(plotlyOutput(outputId = "MostCitCountriesPlot", height = "80vh")) #height = 700))
                                     ),
                                     tabPanel("Table",
                                              shinycssloaders::withSpinner(DT::DTOutput("MostCitCountriesTable"))
@@ -727,6 +1222,9 @@ navbarMenu("Documents",
                       sidebarPanel(width=3,
                                    h3(em(strong("Most Global Cited Documents"))),
                                    br(),
+                                   actionButton("applyMGCDocuments", "Apply!"),
+                                   br(),
+                                   "  ",
                                    h4(em(strong("Graphical Parameters: "))),
                                    "  ",
                                    numericInput("MostCitDocsK", 
@@ -738,12 +1236,30 @@ navbarMenu("Documents",
                                                choices = c("Total Citations"="TC", 
                                                            "Total Citations per Year"="TCY"),
                                                selected = "TC"),
-                                   "  "
+                                   br(),
+                                   br(),
+                                   br(),
+                                   selectInput(
+                                     'MGCDdpi',
+                                     h4(em(strong(
+                                       "Export plot"
+                                     ))),
+                                     choices=c(
+                                       "Please select a dpi value" = "null",
+                                       "75 dpi" = "75",
+                                       "150 dpi" = "150",
+                                       "300 dpi" = "300",
+                                       "600 dpi" = "600"
+                                     ),
+                                     selected = "null"
+                                   ),
+                                   conditionalPanel(condition = "input.MGCDdpi != 'null'",
+                                                    downloadButton("MGCDplot.save", "Export plot as png"))  
                       ),
                       mainPanel(
                         tabsetPanel(type = "tabs",
                                     tabPanel("Plot",
-                                             shinycssloaders::withSpinner(plotlyOutput(outputId = "MostCitDocsPlot", height = 700))
+                                             shinycssloaders::withSpinner(plotlyOutput(outputId = "MostCitDocsPlot", height = "80vh")) #height = 700))
                                     ),
                                     tabPanel("Table",
                                              shinycssloaders::withSpinner(DT::DTOutput("MostCitDocsTable"))
@@ -756,6 +1272,9 @@ navbarMenu("Documents",
                       sidebarPanel(width=3,
                                    h3(em(strong("Most Local Cited Documents"))),
                                    br(),
+                                   actionButton("applyMLCDocuments", "Apply!"),
+                                   br(),
+                                   "  ",
                                    h4(em(strong("Graphical Parameters: "))),
                                    "  ",
                                    numericInput("MostLocCitDocsK", 
@@ -768,12 +1287,30 @@ navbarMenu("Documents",
                                                            ".  " = ".  ",
                                                            "," = ","),
                                                selected = ";"),
-                                   "  "
+                                   br(),
+                                   br(),
+                                   br(),
+                                   selectInput(
+                                     'MLCDdpi',
+                                     h4(em(strong(
+                                       "Export plot"
+                                     ))),
+                                     choices=c(
+                                       "Please select a dpi value" = "null",
+                                       "75 dpi" = "75",
+                                       "150 dpi" = "150",
+                                       "300 dpi" = "300",
+                                       "600 dpi" = "600"
+                                     ),
+                                     selected = "null"
+                                   ),
+                                   conditionalPanel(condition = "input.MLCDdpi != 'null'",
+                                                    downloadButton("MLCDplot.save", "Export plot as png"))  
                       ),
                       mainPanel(
                         tabsetPanel(type = "tabs",
                                     tabPanel("Plot",
-                                             shinycssloaders::withSpinner(plotlyOutput(outputId = "MostLocCitDocsPlot",height = 700))
+                                             shinycssloaders::withSpinner(plotlyOutput(outputId = "MostLocCitDocsPlot", height = "80vh")) #height = 700))
                                     ),
                                     tabPanel("Table",
                                              shinycssloaders::withSpinner(DT::DTOutput("MostLocCitDocsTable"))
@@ -791,6 +1328,9 @@ navbarMenu("Documents",
                       sidebarPanel(width=3,
                                    h3(em(strong("Most Local Cited References"))),
                                    br(),
+                                   actionButton("applyMLCReferences", "Apply!"),
+                                   br(),
+                                   "  ",
                                    h4(em(strong("Graphical Parameters: "))),
                                    "  ",
                                    numericInput("MostCitRefsK", 
@@ -802,12 +1342,31 @@ navbarMenu("Documents",
                                                choices = c(";" = ";", 
                                                            ".  " = ".  ",
                                                            "," = ","),
-                                               selected = ";")
+                                               selected = ";"),
+                                   br(),
+                                   br(),
+                                   br(),
+                                   selectInput(
+                                     'MLCRdpi',
+                                     h4(em(strong(
+                                       "Export plot"
+                                     ))),
+                                     choices=c(
+                                       "Please select a dpi value" = "null",
+                                       "75 dpi" = "75",
+                                       "150 dpi" = "150",
+                                       "300 dpi" = "300",
+                                       "600 dpi" = "600"
+                                     ),
+                                     selected = "null"
+                                   ),
+                                   conditionalPanel(condition = "input.MLCRdpi != 'null'",
+                                                    downloadButton("MLCRplot.save", "Export plot as png"))  
                       ),
                       mainPanel(
                         tabsetPanel(type = "tabs",
                                     tabPanel("Plot",
-                                             shinycssloaders::withSpinner(plotlyOutput(outputId = "MostCitRefsPlot", height = 700))
+                                             shinycssloaders::withSpinner(plotlyOutput(outputId = "MostCitRefsPlot", height = "80vh")) #height = 700))
                                     ),
                                     tabPanel("Table",
                                              shinycssloaders::withSpinner(DT::DTOutput("MostCitRefsTable"))
@@ -822,6 +1381,9 @@ navbarMenu("Documents",
                       sidebarPanel(width=3,
                                    h3(em(strong("Reference Spectroscopy"))),
                                    br(),
+                                   actionButton("applyRPYS", "Apply!"),
+                                   br(),
+                                   "  ",
                                    h4(em(strong("Parameters: "))),
                                    "  ",
                                    # sliderInput("sliderYears",
@@ -837,13 +1399,32 @@ navbarMenu("Documents",
                                                choices = c(";" = ";", 
                                                            ".  " = ".  ",
                                                            "," = ","),
-                                               selected = ";")
+                                               selected = ";"),
+                                   br(),
+                                   br(),
+                                   br(),
+                                   selectInput(
+                                     'RSdpi',
+                                     h4(em(strong(
+                                       "Export plot"
+                                     ))),
+                                     choices=c(
+                                       "Please select a dpi value" = "null",
+                                       "75 dpi" = "75",
+                                       "150 dpi" = "150",
+                                       "300 dpi" = "300",
+                                       "600 dpi" = "600"
+                                     ),
+                                     selected = "null"
+                                   ),
+                                   conditionalPanel(condition = "input.RSdpi != 'null'",
+                                                    downloadButton("RSplot.save", "Export plot as png"))  
                                    
                       ),
                       mainPanel(
                         tabsetPanel(type = "tabs",
                                     tabPanel("Graph", 
-                                             withSpinner(plotlyOutput(outputId = "rpysPlot", height = 700))),
+                                             withSpinner(plotlyOutput(outputId = "rpysPlot", height = "80vh"))), #height = 700))),
                                     tabPanel("RPY Table", 
                                              shinycssloaders::withSpinner(DT::DTOutput(
                                                outputId = "rpysTable"))),
@@ -865,6 +1446,9 @@ navbarMenu("Documents",
                       sidebarPanel(width=3,
                                    h3(em(strong("Most Frequent Words"))),
                                    br(),
+                                   actionButton("applyMFWords", "Apply!"),
+                                   br(),
+                                   "  ",
                                    h4(em(strong("Parameters:"))),
                                    " ",
                                    selectInput("MostRelWords", "Field",
@@ -874,7 +1458,26 @@ navbarMenu("Documents",
                                                            "Abstracts" = "AB"),
                                                selected = "ID"),
                                    hr(),
-                                   sliderInput("MostRelWordsN", label = "Number of words", min = 2, max = 50, step = 1, value = 10)
+                                   sliderInput("MostRelWordsN", label = "Number of words", min = 2, max = 50, step = 1, value = 10),
+                                   br(),
+                                   br(),
+                                   br(),
+                                   selectInput(
+                                     'MRWdpi',
+                                     h4(em(strong(
+                                       "Export plot"
+                                     ))),
+                                     choices=c(
+                                       "Please select a dpi value" = "null",
+                                       "75 dpi" = "75",
+                                       "150 dpi" = "150",
+                                       "300 dpi" = "300",
+                                       "600 dpi" = "600"
+                                     ),
+                                     selected = "null"
+                                   ),
+                                   conditionalPanel(condition = "input.MRWdpi != 'null'",
+                                                    downloadButton("MRWplot.save", "Export plot as png"))  
                                    
                       ),
                       
@@ -882,7 +1485,7 @@ navbarMenu("Documents",
                       mainPanel(
                         tabsetPanel(type = "tabs",
                                     tabPanel("Plot",
-                                             withSpinner(plotlyOutput(outputId = "MostRelWordsPlot", height = 700))
+                                             withSpinner(plotlyOutput(outputId = "MostRelWordsPlot", height = "80vh"))  #height = 700))
                                     ),
                                     tabPanel("Table",
                                              shinycssloaders::withSpinner(DT::DTOutput("MostRelWordsTable"))
@@ -899,6 +1502,9 @@ navbarMenu("Documents",
                       sidebarPanel(width=3,
                                    h3(em(strong("WordCloud"))),
                                    br(),
+                                   actionButton("applyWordCloud", "Apply!"),
+                                   br(),
+                                   "  ",
                                    h4(em(strong("Graphical Parameters:"))),
                                    " ",
                                    selectInput("summaryTerms", "Field",
@@ -943,7 +1549,7 @@ navbarMenu("Documents",
                       mainPanel(
                         tabsetPanel(type = "tabs",
                                     tabPanel("Plot",
-                                             wordcloud2::wordcloud2Output("wordcloud", height = "600px")
+                                             wordcloud2::wordcloud2Output("wordcloud", height = "80vh") #height = "600px")
                                     ),
                                     tabPanel("Table",
                                              shinycssloaders::withSpinner(DT::DTOutput("wordTable"))
@@ -960,6 +1566,9 @@ navbarMenu("Documents",
                       sidebarPanel(width=3,
                                    h3(em(strong("TreeMap "))),
                                    br(),
+                                   actionButton("applyTreeMap", "Apply!"),
+                                   br(),
+                                   "  ",
                                    h4(em(strong("Graphical Parameters:"))),
                                    " ",
                                    selectInput("treeTerms", "Field",
@@ -969,31 +1578,16 @@ navbarMenu("Documents",
                                                            "Abstracts" = "AB"),
                                                selected = "ID"),
                                    hr(),
-                                   sliderInput("treen_words", label = "Number of words", min = 10, max = 200, step = 5, value = 50),
-                                   selectInput("treemeasure", "Word occurrence measure",
-                                               choices = c("Frequency" = "freq",
-                                                           "Square root" = "sqrt",
-                                                           "Log" = "log",
-                                                           "Log10" = "log10"),
-                                               selected = "freq"),
-                                   selectInput("treeCol", "Text colors",
-                                               choices = c("Accent" = "Accent",
-                                                           "Dark" = "Dark2",
-                                                           "Paired"= "Paired",
-                                                           "Pastel1"="Pastel1",
-                                                           "Pastel2"="Pastel2",
-                                                           "Set1"="Set1",
-                                                           "Set2"="Set2",
-                                                           "Set3"="Set3"),
-                                               selected = "Pastel2"),
-                                   sliderInput("treeFont", label = "Font size", min=6,max=20,step=1,value=10)
+                                   sliderInput("treen_words", label = "Number of words", min = 10, max = 200, step = 5, value = 50)
+
                       ),
                       
                       # Show TreeMap
                       mainPanel(
                         tabsetPanel(type = "tabs",
                                     tabPanel("Plot",
-                                             shinycssloaders::withSpinner(plotOutput("treemap"))
+                                             shinycssloaders::withSpinner(plotlyOutput(outputId = "treemap", height = "80vh")) #height = 700))
+                                             #shinycssloaders::withSpinner(plotOutput("treemap"))
                                     ),
                                     tabPanel("Table",
                                              shinycssloaders::withSpinner(DT::DTOutput("treeTable"))
@@ -1010,6 +1604,9 @@ navbarMenu("Documents",
                       sidebarPanel(width=3,
                                    h3(em(strong("Word Dynamics"))),
                                    br(),
+                                   actionButton("applyWD", "Apply!"),
+                                   br(),
+                                   "  ",
                                    h4(em(strong("Graphical Parameters:"))),
                                    " ",
                                    selectInput("growthTerms", "Field",
@@ -1027,9 +1624,27 @@ navbarMenu("Documents",
                                                            "No" = "No"),
                                                selected = "No"),
                                    hr(),
-                                   sliderInput("topkw", label = "Number of words", min = 1, max = 100, step = 1, value = c(1,10))
-                                   
-                                   #uiOutput("sliderKwYears")
+                                   sliderInput("topkw", label = "Number of words", min = 1, max = 100, step = 1, value = c(1,10)),                                   br(),
+                                   br(),
+                                   br(),
+                                   br(),
+                                   selectInput(
+                                     'WDdpi',
+                                     h4(em(strong(
+                                       "Export plot"
+                                     ))),
+                                     choices=c(
+                                       "Please select a dpi value" = "null",
+                                       "75 dpi" = "75",
+                                       "150 dpi" = "150",
+                                       "300 dpi" = "300",
+                                       "600 dpi" = "600"
+                                     ),
+                                     selected = "null"
+                                   ),
+                                   conditionalPanel(condition = "input.WDdpi != 'null'",
+                                                    downloadButton("WDplot.save", "Export plot as png"))  
+    
                       ),
                       
                       # 
@@ -1075,7 +1690,26 @@ navbarMenu("Documents",
                                    #uiOutput("trendMinFreq"),
                                    sliderInput("trendMinFreq", label = "Word Minimum Frequency", min = 0, max = 100, value = 5, step = 1),
                                    sliderInput("trendNItems", label = "N. of Words per Year", min = 1, max = 20, step = 1, value = 5),
-                                   sliderInput("trendSize", label = "Word label size", min = 0, max = 20, step = 1, value = 5)
+                                   sliderInput("trendSize", label = "Word label size", min = 0, max = 20, step = 1, value = 5),
+                                   br(),
+                                   br(),
+                                   br(),
+                                   selectInput(
+                                     'TTdpi',
+                                     h4(em(strong(
+                                       "Export plot"
+                                     ))),
+                                     choices=c(
+                                       "Please select a dpi value" = "null",
+                                       "75 dpi" = "75",
+                                       "150 dpi" = "150",
+                                       "300 dpi" = "300",
+                                       "600 dpi" = "600"
+                                     ),
+                                     selected = "null"
+                                   ),
+                                   conditionalPanel(condition = "input.TTdpi != 'null'",
+                                                    downloadButton("TTplot.save", "Export plot as png"))  
                                    
                                    
                       ),
@@ -1093,6 +1727,90 @@ navbarMenu("Documents",
                       )
                     ))
 ),
+
+### COUPLING ----
+navbarMenu("Coupling ",
+           
+           #### Coupling ----
+           "  ",
+           "  ",
+           tabPanel("Clustering by Coupling",
+                    sidebarLayout(
+                      sidebarPanel(width=3,
+                                   h3(em(strong("Coupling Map"))),
+                                   br(),
+                                   
+                                   actionButton("applyCM", "Apply!"),
+                                   "  ",
+                                   "  ",
+                                   h4(em(strong("CM Parameters: "))),
+                                   "  ",
+                                   selectInput("CManalysis", 
+                                               label = "Unit of Analysis",
+                                               choices = c("Documents" = "documents", 
+                                                           "Authors" = "authors",
+                                                           "Sources" = "sources"),
+                                               selected = "documents"),
+                                   selectInput("CMfield", 
+                                               label = "Coupling measured by",
+                                               choices = c("References" ="CR",
+                                                           "Keywords Plus" = "ID", 
+                                                           "Author's Keywords" = "DE",
+                                                           "Titles" = "TI",
+                                                           "Abstracts" = "AB"),
+                                               selected = "CR"),
+                                   conditionalPanel(
+                                     condition = "input.CMfield == 'TI' | input.CMfield == 'AB'",
+                                     selectInput("CMstemming", label="Word Stemming",
+                                                 choices = c("Yes" = TRUE,
+                                                             "No" = FALSE),
+                                                 selected = FALSE)),
+                                   sliderInput("CMn", label="Number of Units",value=250,min=50,max=5000,step=10),
+                                   sliderInput("CMfreq", label="Min Cluster Frequency (per thousand units)",value=5,min=1,max=100,step=1),
+                                   sliderInput("CMn.labels", label="Number of Labels (for each cluster)",value=1,min=1,max=5,step=1),
+                                   sliderInput("sizeCM", label="Label size",value=0.3,min=0.0,max=1,step=0.05),
+                                   
+                                   br(),
+                                   br(),
+                                   br(),
+                                   selectInput(
+                                     'CMdpi',
+                                     h4(em(strong(
+                                       "Export plot"
+                                     ))),
+                                     choices=c(
+                                       "Please select a dpi value" = "null",
+                                       "75 dpi" = "75",
+                                       "150 dpi" = "150",
+                                       "300 dpi" = "300",
+                                       "600 dpi" = "600"
+                                     ),
+                                     selected = "null"
+                                   ),
+                                   conditionalPanel(condition = "input.CMdpi != 'null'",
+                                                    downloadButton("CMplot.save", "Export plot as png"))
+                      ),
+                      mainPanel("Clustering by Coupling",
+                                tabsetPanel(type = "tabs",
+                                            tabPanel("Map",
+                                                     shinycssloaders::withSpinner(plotlyOutput(outputId = "CMPlot", height = "80vh")) #height = 700))
+                                            ),
+                                            tabPanel("Network",
+                                                     shinycssloaders::withSpinner(visNetworkOutput("CMNetPlot", height = "80vh"))), #height = "750px",width = "1100px"))),
+                                            tabPanel("Data",
+                                                     shinycssloaders::withSpinner(DT::DTOutput(outputId = "CMTable"))
+                                            ),
+                                            tabPanel("Clusters",
+                                                     shinycssloaders::withSpinner(DT::DTOutput(outputId = "CMTableCluster"))
+                                            )
+                                )
+                                
+                      )
+                      
+                    )
+           ) ## End of tabPanel ("Thematic Map")
+),
+          
 
 
 ### CONCEPTUAL STRUCTURE ----
@@ -1233,10 +1951,12 @@ navbarMenu("Conceptual Structure",
                     mainPanel(
                       tabsetPanel(type = "tabs",
                                   tabPanel("Map", 
-                                           shinycssloaders::withSpinner(visNetworkOutput("cocPlot", height = "750px",width = "1100px"))),
+                                           shinycssloaders::withSpinner(visNetworkOutput("cocPlot", height = "80vh"))), #height = "750px",width = "1100px"))),
                                   tabPanel("Table", 
                                            shinycssloaders::withSpinner(DT::DTOutput(
-                                             outputId = "cocTable")))
+                                             outputId = "cocTable"))),
+                                  tabPanel("Degree Plot", 
+                                           shinycssloaders::withSpinner(plotlyOutput(outputId = "cocDegree", height = "80vh"))) #height=700)))
                       )
                       
                       )
@@ -1271,20 +1991,43 @@ navbarMenu("Conceptual Structure",
                                                  choices = c("Yes" = TRUE,
                                                              "No" = FALSE),
                                                  selected = FALSE)),
-                                   sliderInput("TMn", label="Number of Words",value=250,min=50,max=500,step=10),
-                                   sliderInput("TMfreq", label="Min Cluster Frequency",value=5,min=1,max=100,step=1),
+                                   sliderInput("TMn", label="Number of Words",value=250,min=50,max=5000,step=10),
+                                   sliderInput("TMfreq", label="Min Cluster Frequency (per thousand docs)",value=5,min=1,max=100,step=1),
                                    sliderInput("TMn.labels", label="Number of Labels (for each cluster)",value=1,min=1,max=5,step=1),
-                                   sliderInput("sizeTM", label="Label size",value=0.3,min=0.0,max=1,step=0.05)
+                                   sliderInput("sizeTM", label="Label size",value=0.3,min=0.0,max=1,step=0.05),
+                                   
+                                   br(),
+                                   br(),
+                                   br(),
+                                   selectInput(
+                                     'TMdpi',
+                                     h4(em(strong(
+                                       "Export plot"
+                                     ))),
+                                     choices=c(
+                                       "Please select a dpi value" = "null",
+                                       "75 dpi" = "75",
+                                       "150 dpi" = "150",
+                                       "300 dpi" = "300",
+                                       "600 dpi" = "600"
+                                     ),
+                                     selected = "null"
+                                   ),
+                                   conditionalPanel(condition = "input.TMdpi != 'null'",
+                                   downloadButton("TMplot.save", "Export plot as png"))
                       ),
                       mainPanel("Thematic Map",
                                 tabsetPanel(type = "tabs",
                                             tabPanel("Map",
-                                                     shinycssloaders::withSpinner(plotlyOutput(outputId = "TMPlot", height = 700))
+                                                     shinycssloaders::withSpinner(plotlyOutput(outputId = "TMPlot", height = "80vh")) #height = 700))
                                             ),
                                             tabPanel("Network",
-                                                     shinycssloaders::withSpinner(visNetworkOutput("NetPlot", height = "750px",width = "1100px"))),
-                                            tabPanel("Table",
+                                                     shinycssloaders::withSpinner(visNetworkOutput("NetPlot", height = "80vh"))), #height = "750px",width = "1100px"))),
+                                            tabPanel("Data",
                                                      shinycssloaders::withSpinner(DT::DTOutput(outputId = "TMTable"))
+                                            ),
+                                            tabPanel("Clusters",
+                                                     shinycssloaders::withSpinner(DT::DTOutput(outputId = "TMTableCluster"))
                                             )
                                 )
                                 
@@ -1311,8 +2054,8 @@ navbarMenu("Conceptual Structure",
                                                            "Abstracts" = "AB"),
                                                selected = "ID"),
                                    
-                                   sliderInput("nTE", label="Number of Words",value=250,min=50,max=500,step=10),
-                                   sliderInput("fTE", label="Min Cluster Frequency",value=5,min=1,max=100,step=1),
+                                   sliderInput("nTE", label="Number of Words",value=250,min=50,max=5000,step=10),
+                                   sliderInput("fTE", label="Min Cluster Frequency (per thousand docs)",value=5,min=1,max=100,step=1),
                                    selectInput("TEmeasure", 
                                                label = "Weight index",
                                                choices = c("Inclusion Index" = "inclusion", 
@@ -1336,7 +2079,7 @@ navbarMenu("Conceptual Structure",
                                 tabsetPanel(type = "tabs",
                                             tabPanel("Thematic Evolution", tabsetPanel(type="tabs",
                                               tabPanel("Map",
-                                                       shinycssloaders::withSpinner(networkD3::sankeyNetworkOutput(outputId = "TEPlot",height = "600px"))
+                                                       shinycssloaders::withSpinner(networkD3::sankeyNetworkOutput(outputId = "TEPlot", height = "80vh"))  #height = "600px"))
                                                       ),
                                               tabPanel("Table",
                                                        shinycssloaders::withSpinner(DT::DTOutput(outputId = "TETable"))
@@ -1344,58 +2087,78 @@ navbarMenu("Conceptual Structure",
                                             ),
                                             tabPanel("Time Slice 1", tabsetPanel(type="tabs",
                                                                                           tabPanel("Thematic Map",
-                                                                                                    shinycssloaders::withSpinner(plotlyOutput(outputId = "TMPlot1", height = 700))
+                                                                                                    shinycssloaders::withSpinner(plotlyOutput(outputId = "TMPlot1", height = "80vh")) #height = 700))
                                                                                             ),
                                                                                           tabPanel("Network",
-                                                                                                    shinycssloaders::withSpinner(visNetworkOutput("NetPlot1", height = "750px",width = "1100px"))
+                                                                                                    shinycssloaders::withSpinner(visNetworkOutput("NetPlot1", height = "80vh")) # height = "750px",width = "1100px"))
                                                                                             ),
-                                                                                          tabPanel("Table",
+                                                                                          tabPanel("Data",
                                                                                                     shinycssloaders::withSpinner(DT::DTOutput(outputId = "TMTable1"))
-                                                                                          ))      
+                                                                                          ),
+                                                                                          tabPanel("Clusters",
+                                                                                                    shinycssloaders::withSpinner(DT::DTOutput(outputId = "TMTableCluster1"))
+                                                                                          )
+                                                                                 )      
                                             ),
                                             tabPanel("Time Slice 2", tabsetPanel(type="tabs",
                                                                                             tabPanel("Thematic Map",
-                                                                                                     shinycssloaders::withSpinner(plotlyOutput(outputId = "TMPlot2", height = 700))
+                                                                                                     shinycssloaders::withSpinner(plotlyOutput(outputId = "TMPlot2", height = "80vh"))  #height = 700))
                                                                                             ),
                                                                                             tabPanel("Network",
-                                                                                                     shinycssloaders::withSpinner(visNetworkOutput("NetPlot2", height = "750px",width = "1100px"))
+                                                                                                     shinycssloaders::withSpinner(visNetworkOutput("NetPlot2", height = "80vh")) #height = "750px",width = "1100px"))
                                                                                             ),
-                                                                                            tabPanel("Table",
+                                                                                            tabPanel("Data",
                                                                                                     shinycssloaders::withSpinner(DT::DTOutput(outputId = "TMTable2"))
-                                                                                            )) 
+                                                                                            ),
+                                                                                            tabPanel("Clusters",
+                                                                                                  shinycssloaders::withSpinner(DT::DTOutput(outputId = "TMTableCluster2"))
+                                                                                            )
+                                                                                 ) 
                                             ),
                                             tabPanel("Time Slice 3", tabsetPanel(type="tabs",
                                                                                             tabPanel("Thematic Map",
-                                                                                                     shinycssloaders::withSpinner(plotlyOutput(outputId = "TMPlot3", height = 700))
+                                                                                                     shinycssloaders::withSpinner(plotlyOutput(outputId = "TMPlot3", height = "80vh")) #height = 700))
                                                                                             ),
                                                                                             tabPanel("Network",
-                                                                                                     shinycssloaders::withSpinner(visNetworkOutput("NetPlot3", height = "750px",width = "1100px"))
+                                                                                                     shinycssloaders::withSpinner(visNetworkOutput("NetPlot3", height = "80vh")) #height = "750px",width = "1100px"))
                                                                                             ),
-                                                                                            tabPanel("Table",
+                                                                                            tabPanel("Data",
                                                                                                      shinycssloaders::withSpinner(DT::DTOutput(outputId = "TMTable3"))
-                                                                                            )) 
+                                                                                            ),
+                                                                                 tabPanel("Clusters",
+                                                                                          shinycssloaders::withSpinner(DT::DTOutput(outputId = "TMTableCluster3"))
+                                                                                          )
+                                                                                )
                                             ),
                                             tabPanel("Time Slice 4", tabsetPanel(type="tabs",
                                                                                             tabPanel("Thematic Map",
-                                                                                                     shinycssloaders::withSpinner(plotlyOutput(outputId = "TMPlot4", height = 700))
+                                                                                                     shinycssloaders::withSpinner(plotlyOutput(outputId = "TMPlot4", height = "80vh")) #height = 700))
                                                                                             ),
                                                                                             tabPanel("Network",
-                                                                                                     shinycssloaders::withSpinner(visNetworkOutput("NetPlot4", height = "750px",width = "1100px"))
+                                                                                                     shinycssloaders::withSpinner(visNetworkOutput("NetPlot4", height = "80vh")) #height = "750px",width = "1100px"))
                                                                                             ),
-                                                                                            tabPanel("Table",
+                                                                                            tabPanel("Data",
                                                                                                       shinycssloaders::withSpinner(DT::DTOutput(outputId = "TMTable4"))
-                                                                                            )) 
+                                                                                            ),
+                                                                                            tabPanel("Clusters",
+                                                                                                       shinycssloaders::withSpinner(DT::DTOutput(outputId = "TMTableCluster4"))
+                                                                                            )
+                                            ) 
                                             ),
                                             tabPanel("Time Slice 5", tabsetPanel(type="tabs",
                                                                                             tabPanel("Thematic Map",
-                                                                                                     shinycssloaders::withSpinner(plotlyOutput(outputId = "TMPlot5", height = 700))
+                                                                                                     shinycssloaders::withSpinner(plotlyOutput(outputId = "TMPlot5", height = "80vh")) #height = 700))
                                                                                             ),
                                                                                             tabPanel("Network",
-                                                                                                     shinycssloaders::withSpinner(visNetworkOutput("NetPlot5", height = "750px",width = "1100px"))
+                                                                                                     shinycssloaders::withSpinner(visNetworkOutput("NetPlot5", height = "80vh")) #height = "750px",width = "1100px"))
                                                                                             ),
-                                                                                            tabPanel("Table",
+                                                                                            tabPanel("Data",
                                                                                                      shinycssloaders::withSpinner(DT::DTOutput(outputId = "TMTable5"))
-                                                                                            ))
+                                                                                            ),
+                                                                                            tabPanel("Clusters",
+                                                                                                      shinycssloaders::withSpinner(DT::DTOutput(outputId = "TMTableCluster5"))
+                                                                                            )
+                                            )
                                             )
                                 )
                                 
@@ -1465,7 +2228,33 @@ navbarMenu("Conceptual Structure",
                           value = 10),
                         numericInput("CSdoc", 
                                      label=("Num. of documents"), 
-                                     value = 20)
+                                     value = 5),
+
+                        br(),
+                        br(),
+                        selectInput(
+                          'FAdpi',
+                          h4(em(strong(
+                            "Export plots as png"
+                          ))),
+                          choices=c(
+                            "Please select a dpi value" = "null",
+                            "75 dpi" = "75",
+                            "150 dpi" = "150",
+                            "300 dpi" = "300",
+                            "600 dpi" = "600"
+                          ),
+                          selected = "null"
+                        ),
+                        conditionalPanel(condition = "input.FAdpi != 'null'",
+                                         downloadButton("FA1plot.save", "Term Factorial Map "),
+                                         h4(" "),
+                                         downloadButton("FA2plot.save", "Topic Dendrogram "),
+                                         h4(" "),
+                                         downloadButton("FA3plot.save", "Most Contributing Map "),
+                                         h4(" "),
+                                         downloadButton("FA4plot.save", "Most Cited Map ")
+                                         )  
                         
                       ),
                       
@@ -1627,10 +2416,12 @@ navbarMenu("Intellectual Structure",
                         tabsetPanel(type = "tabs",
                                     
                                     tabPanel("Graph", 
-                                             shinycssloaders::withSpinner(visNetworkOutput("cocitPlot", height = "750px",width = "1100px"))),         
+                                             shinycssloaders::withSpinner(visNetworkOutput("cocitPlot", height = "80vh"))), #height = "750px", width = "1100px"))),         
                                     tabPanel("Table", 
                                              shinycssloaders::withSpinner(DT::DTOutput(
-                                                outputId = "cocitTable")))
+                                                outputId = "cocitTable"))),
+                                    tabPanel("Degree Plot", 
+                                             shinycssloaders::withSpinner(plotlyOutput(outputId = "cocitDegree", height=700)))
                                             
                         )
                         #shinycssloaders::withSpinner(plotOutput(outputId = "cocitPlot"))
@@ -1640,17 +2431,18 @@ navbarMenu("Intellectual Structure",
                     
                     ), ## End of tabPanel "Co-citations"
            ### Historiograph ----
+           
            tabPanel(title="Historiograph",
                     sidebarLayout(
                       
-                      sidebarPanel(width=3,
+                      sidebarPanel(
+                                   width=3,
                                    h3(em(strong("Historiograph "))),
                                    br(),
                                    actionButton("applyHist", "Apply!"),
                                    #selectInput('save_colnet', 'Save network as:', choices = c('No, thanks!' = 'no_thanks', 'Pajek format' = 'pajek')),
                                    #conditionalPanel(condition = "input.save_colnet == 'pajek'",
-                                   
-                                   
+
                                    "  ",
                                    "  ",
                                    h4(em(strong("Historiograph Parameters: "))),
@@ -1661,26 +2453,46 @@ navbarMenu("Intellectual Structure",
                                                min = 5,
                                                max = 50,
                                                value = 20),
-                                   selectInput(inputId = "histsearch",
-                                               label = "Search algorithm",
-                                               choices = c("Fast search" = "FAST", 
-                                                           "Full search" = "FULL"),
-                                               selected = "FAST"),
+                                   
                                    "  ",
                                    "  ",
                                    h4(em(strong("Graphical Parameters: "))),
                                    "  ",
+                                   selectInput(inputId = "titlelabel",
+                                               label = "Node label",
+                                               choices = c("Short id (1st Author, Year)" = "FALSE",
+                                                           "Document Title" = "TRUE"),
+                                               selected = "FALSE"),
                                    sliderInput(inputId = "histlabelsize",
                                                label = "Label size",
                                                min = 0.0,
                                                max = 20,
-                                               value = 10),
+                                               value = 3),
                                    
                                    sliderInput(inputId = "histsize",
                                                label = "Node size",
-                                               min = 0.1,
+                                               min = 0,
                                                max = 20,
-                                               value = 10)
+                                               value = 4),
+                                   br(),
+                                   br(),
+                                   selectInput(
+                                     'HGdpi',
+                                     h4(em(strong(
+                                       "Export plot"
+                                     ))),
+                                     choices=c(
+                                       "Please select a dpi value" = "null",
+                                       "75 dpi" = "75",
+                                       "150 dpi" = "150",
+                                       "300 dpi" = "300",
+                                       "600 dpi" = "600"
+                                     ),
+                                     selected = "null"
+                                   ),
+                                   conditionalPanel(condition = "input.HGdpi != 'null'",
+                                                    downloadButton("HGplot.save", "Export plot as png"))  
+                                   
                                   ),
                       mainPanel(
                         tabsetPanel(type = "tabs",
@@ -1826,11 +2638,13 @@ navbarMenu("Social Structure",
                       mainPanel(
                         tabsetPanel(type = "tabs",
                                     tabPanel("Graph", 
-                                             shinycssloaders::withSpinner(visNetworkOutput("colPlot", height = "750px",width = "1100px"))), 
+                                             shinycssloaders::withSpinner(visNetworkOutput("colPlot", height = "80vh"))), #,width = "1100px"))), 
                                              #shinycssloaders::withSpinner(plotOutput(outputId = "colPlot"))),
                                     tabPanel("Table", 
                                              shinycssloaders::withSpinner(DT::DTOutput(
-                                               outputId = "colTable")))
+                                               outputId = "colTable"))),
+                                    tabPanel("Degree Plot", 
+                                             shinycssloaders::withSpinner(plotlyOutput(outputId = "colDegree", height = "80vh"))) #height=700)))
                         )
                         
                         #shinycssloaders::withSpinner(plotOutput(outputId = "colPlot"))
@@ -1863,7 +2677,25 @@ navbarMenu("Social Structure",
                                                label = "Edge size",
                                                min = 0.1,
                                                max = 20,
-                                               value = 5)
+                                               value = 5),
+                                   br(),
+                                   br(),
+                                   selectInput(
+                                     'CCdpi',
+                                     h4(em(strong(
+                                       "Export plot"
+                                     ))),
+                                     choices=c(
+                                       "Please select a dpi value" = "null",
+                                       "75 dpi" = "75",
+                                       "150 dpi" = "150",
+                                       "300 dpi" = "300",
+                                       "600 dpi" = "600"
+                                     ),
+                                     selected = "null"
+                                   ),
+                                   conditionalPanel(condition = "input.CCdpi != 'null'",
+                                                    downloadButton("CCplot.save", "Export plot as png"))  
                       ),
                       mainPanel(
                         tabsetPanel(type = "tabs",

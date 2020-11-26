@@ -3,7 +3,8 @@
 \name{isiCollection}
 \alias{isiCollection}
 \title{"Bibliometrics" manuscripts from Clarivate Analytics WoS.}
-\format{A data frame with 329 rows and 16 variables:
+\format{
+A data frame with 329 rows and 16 variables:
 \describe{
 \item{AU}{Authors}
 \item{TI}{Document Title}
@@ -21,13 +22,14 @@
 \item{SC}{Subject Category}
 \item{UT}{Unique Article Identifier}
 \item{DB}{Database}
-}}
+}
+}
 \source{
-\url{http://www.webofknowledge.com}
+\url{https://www.webofknowledge.com}
 }
 \description{
 Manuscripts including the term "bibliometrics" in the title.\cr
 Period: 1985 - 2017\cr
-Database: \href{http://www.webofknowledge.com}{Clarivate Analytics Web of Science}\cr
+Database: \href{https://www.webofknowledge.com}{Clarivate Analytics Web of Science}\cr
 Format: bibtex\cr
 }

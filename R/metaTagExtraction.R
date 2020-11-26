@@ -8,7 +8,7 @@
 #' \tabular{lll}{
 #' \code{"CR_AU"}\tab   \tab First Author of each cited reference\cr
 #' \code{"CR_SO"}\tab   \tab Source of each cited reference\cr
-#' \code{"AU_CO"}\tab   \tab Country of affiliation for each co-author\cr
+#' \code{"AU_CO"}\tab   \tab Country of affiliation for co-authors \cr
 #' \code{"AU1_CO"}\tab   \tab Country of affiliation for the first author\cr
 #' \code{"AU_UN"}\tab   \tab University of affiliation for each co-author and the corresponding author (AU1_UN)\cr
 #' \code{"SR"}\tab     \tab Short tag of the document (as used in reference lists)}
@@ -34,44 +34,44 @@
 #' scientometrics <- metaTagExtraction(scientometrics, Field = "CR_SO", sep = ";")
 #' unlist(strsplit(scientometrics$CR_SO[1], ";"))
 #'
-#' #Example 3: Affiliation country for co-author
+#' #Example 3: Affiliation country for co-authors
 #'
 #' data(scientometrics)
 #' scientometrics <- metaTagExtraction(scientometrics, Field = "AU_CO", sep = ";")
 #' scientometrics$AU_CO[1:10]
 #'
-#' @seealso \code{\link{scopus2df}} for converting ISO or SCPUS Export file into a data frame.
+#' @seealso \code{\link{convert2df}} for importing and converting bibliographic files into a data frame.
 #' @seealso \code{\link{biblioAnalysis}} function for bibliometric analysis
 #' 
 #' @export
 
 metaTagExtraction<-function(M, Field = "CR_AU", sep = ";", aff.disamb=TRUE){
-
-
-### data cleaning
+  
+  
+  ### data cleaning
   if ("CR" %in% names(M)){
-    M$CR=str_replace_all(as.character(M$CR),"DOI;","DOI ")
+    M$CR=gsub("DOI;","DOI ",as.character(M$CR))
   }
   
   
-### SR field creation
-
+  ### SR field creation
+  
   if (Field=="SR"){
     M<-SR(M)
   }
-
-
+  
+  
   if (Field=="CR_AU"){
     M<-CR_AU(M,sep)
   }
-
-### CR_SO field creation
-
+  
+  ### CR_SO field creation
+  
   if (Field=="CR_SO"){
     M<-CR_SO(M,sep)
   }
-### AU_CO field creation
-
+  ### AU_CO field creation
+  
   if (Field=="AU_CO"){
     M<-AU_CO(M)  
   }
@@ -81,9 +81,9 @@ metaTagExtraction<-function(M, Field = "CR_AU", sep = ";", aff.disamb=TRUE){
   }
   
   
-# UNIVERSITY AFFILIATION OF ALL AUTHORS AND CORRESPONDING AUTHOR
+  # UNIVERSITY AFFILIATION OF ALL AUTHORS AND CORRESPONDING AUTHOR
   if (Field=="AU_UN"){
-      ### with disambiguation
+    ### with disambiguation
     if(isTRUE(aff.disamb)){M<-AU_UN(M,sep)
     }else{
       ### without disambiguation
@@ -95,7 +95,7 @@ metaTagExtraction<-function(M, Field = "CR_AU", sep = ";", aff.disamb=TRUE){
       ind=regexpr("\\),", M$AU1_UN)
       a=which(ind>-1)
       M$AU1_UN[a]=trim(substr(M$AU1_UN[a],ind[a]+2,nchar(M$AU1_UN[a])))
-      }
+    }
   }
   
   return(M)
@@ -133,14 +133,15 @@ SR <- function(M){
   M$SR_FULL<- gsub("\\s+", " ", SR)
   
   ## assign an unique name to each document
+  SR<- gsub("\\s+", " ", SR)
   st<-i<-0
   while(st==0){
     ind <- which(duplicated(SR))
     if (length(ind)>0){
       i <- i+1
       SR[ind]=paste0(SR[ind],"-",letters[i],sep="")}else{st <- 1}}
-  
-  M$SR<- gsub("\\s+", " ", SR)
+  M$SR<- SR
+  #M$SR<- gsub("\\s+", " ", SR)
   return(M)
 }
 
@@ -155,7 +156,7 @@ CR_AU<-function(M,sep){
   
   # vector of cited authors
   for (i in 1:size[1]){
-    FCAU[[i]]=str_replace_all(trim.leading(sub(",.*", "", listCAU[[i]])), "[[:punct:]]", "")
+    FCAU[[i]]=gsub("[[:punct:]]", "",trim.leading(sub(",.*", "", listCAU[[i]])))
     CCR[i]=paste(FCAU[[i]],collapse=";")}
   
   M$CR_AU=CCR
@@ -210,13 +211,15 @@ AU_CO<-function(M){
   size=dim(M)[1]
   data("countries",envir=environment())
   countries=as.character(countries[[1]])
-  if (M$DB[1]=="ISI"){
+  if (M$DB[1] %in% c("ISI", "PUBMED")){
     countries=as.character(sapply(countries,function(s) paste0(s,".",collapse="")))
   } else if (M$DB[1]=="SCOPUS"){
     countries=as.character(sapply(countries,function(s) paste0(s,";",collapse="")))}
   
   M$AU_CO=NA
   C1=M$C1
+  ## must replace all NA before "removing reprint info", or NA_character_ became string "NA"
+  C1[which(is.na(C1))]=M$RP[which(is.na(C1))]
   
   ## remove reprint information from C1
   C1=unlist(lapply(C1,function(l){
@@ -224,10 +227,11 @@ AU_CO<-function(M){
     #l=l[regexpr("REPRINT AUTHOR",l)==-1]
     l=paste0(l,collapse=";")
   }))
-  ###
+  ### above changes all NA to 'NA'
   
-  C1[which(is.na(C1))]=M$RP[which(is.na(C1))]
   C1=gsub("\\[.*?\\] ", "", C1)
+  ## change 'NA' back to NA
+  C1[which(C1 == "NA")]=NA
   if (M$DB[1]=="ISI"){ C1=lastChar(C1,last=".")}
   if (M$DB[1]=="SCOPUS"){ C1=lastChar(C1,last=";")}
   
@@ -235,7 +239,8 @@ AU_CO<-function(M){
   RP=M$RP
   #RP[which(is.na(RP))]=M$RRP)
   RP=paste(RP,";",sep="")
-  RP=gsub("[[:punct:][:blank:]]+", " ", RP)
+  #RP = gsub("[[:punct:][:blank:]]+", " ", RP)
+  ## this will make gregexpr(l, RP[i], fixed=TRUE) fail as countries has the format '_COUNTRY_.' or '_COUNTRY_;'
   
   for (i in 1:size[1]){
     if (!is.na(C1[i])){
@@ -252,7 +257,7 @@ AU_CO<-function(M){
   M$AU_CO=gsub(".", "", M$AU_CO, fixed = TRUE)
   M$AU_CO=gsub(";;", ";", M$AU_CO, fixed = TRUE)
   M$AU_CO=gsub("UNITED STATES","USA",M$AU_CO)
-  M$AU_CO=gsub("GEORGIA","USA",M$AU_CO)
+  M$AU_CO=gsub("TAIWAN","CHINA",M$AU_CO)
   M$AU_CO=gsub("ENGLAND","UNITED KINGDOM",M$AU_CO)
   M$AU_CO=gsub("SCOTLAND","UNITED KINGDOM",M$AU_CO)
   M$AU_CO=gsub("WALES","UNITED KINGDOM",M$AU_CO)
@@ -278,15 +283,23 @@ AU1_CO<-function(M,sep){
   M$AU1_CO=NA
   C1=M$C1
   C1[which(!is.na(M$RP))]=M$RP[which(!is.na(M$RP))]
-  C1=unlist(lapply(strsplit(C1,sep),function(l) l[1]))
+  ## do this before strsplit(), otherwise entries with multiple (reprint) author would be split between first group of authors
   C1=gsub("\\[.*?\\] ", "", C1)
+  ## remove string before the first "(REPRINT AUTHOR)", otherwise C1 may get split between first group of authors, thus removing address, forcing it to default to RP.
+  C1=gsub("^.*?\\(REPRINT\\sAUTHOR\\)", "", C1)
+  C1=unlist(lapply(strsplit(C1,sep),function(l) l[1]))
+  ## remove all characters before the last comma, thus constantly leaving only country, or in the case of US, state + zip_code + country.
+  ## this way the need to distinguish Georgia and Georgia, US is eliminated.
+  C1=gsub("^(.+)?,", "", C1)
   C1=gsub("[[:punct:][:blank:]]+", " ", C1)
   C1=paste(trim(C1)," ",sep="")
   if (M$DB[1]!="PUBMED"){
     RP=M$RP
     #RP[which(is.na(RP))]=M$RRP)
     RP=paste(RP,";",sep="")
-    RP=gsub("[[:punct:][:blank:]]+", " ", RP)} else {RP=C1}
+    RP=gsub("[[:punct:][:blank:]]+", " ", RP)} else {
+      RP <- C1 <-paste(" ",gsub("[[:punct:]]","",C1),sep="")
+      }
   
   for (i in 1:size[1]){
     if (!is.na(C1[i])){
@@ -303,7 +316,7 @@ AU1_CO<-function(M,sep){
   }
   M$AU1_CO=trim(gsub("[[:digit:]]","",M$AU1_CO))
   M$AU1_CO=gsub("UNITED STATES","USA",M$AU1_CO)
-  M$AU1_CO=gsub("GEORGIA","USA",M$AU1_CO)
+  M$AU1_CO=gsub("TAIWAN","CHINA",M$AU1_CO)
   M$AU1_CO=gsub("ENGLAND","UNITED KINGDOM",M$AU1_CO)
   M$AU1_CO=gsub("SCOTLAND","UNITED KINGDOM",M$AU1_CO)
   M$AU1_CO=gsub("WALES","UNITED KINGDOM",M$AU1_CO)
@@ -318,11 +331,11 @@ AU_UN<-function(M,sep){
   
   ## remove reprint information from C1
   C1=M$C1
-  C1=unlist(lapply(C1,function(l){
-    l=unlist(strsplit(l,";"))
-    #l=l[regexpr("REPRINT AUTHOR",l)==-1]
-    l=paste0(l,collapse=";")
-  }))
+  # C1=unlist(lapply(C1,function(l){
+  #   l=unlist(strsplit(l,";"))
+  #   #l=l[regexpr("REPRINT AUTHOR",l)==-1]
+  #   l=paste0(l,collapse=";")
+  # }))
   ###
   AFF=gsub("\\[.*?\\] ", "", C1)
   indna=which(is.na(AFF))

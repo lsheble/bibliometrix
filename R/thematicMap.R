@@ -15,7 +15,7 @@
 #' @param field is the textual attribute used to build up the thematic map. It can be \code{field = c("ID","DE", "TI", "AB")}.
 #' \code{\link{biblioNetwork}} or \code{\link{cocMatrix}}.
 #' @param n is an integer. It indicates the number of terms to include in the analysis.
-#' @param minfreq is a integer. It indicates the minimum frequency of a cluster.
+#' @param minfreq is a integer. It indicates the minimum frequency (per thousand) of a cluster. It is a number in the range (0,1000).
 #' @param stemming is logical. If it is TRUE the word (from titles or abstracts) will be stemmed (using the Porter's algorithm).
 #' @param size is numerical. It indicates del size of the cluster circles and is a number in the range (0.01,1).
 #' @param n.labels is integer. It indicates how many labels associate to each cluster. Default is \code{n.labels = 1}.
@@ -42,6 +42,8 @@
 #' @export
 
 thematicMap <- function(M, field="ID", n=250, minfreq=5, stemming=FALSE, size=0.5, n.labels=1, repel=TRUE){
+  
+  minfreq <- max(2,floor(minfreq*nrow(M)/1000))
   
   switch(field,
          ID={
@@ -131,8 +133,14 @@ thematicMap <- function(M, field="ID", n=250, minfreq=5, stemming=FALSE, size=0.
   }
   #df_lab$cluster_label=gsub(";NA;",";",df_lab$cluster_label)
   
-  centrality=centrality*10
+  centrality=centrality
   df=data.frame(centrality=centrality,density=density,rcentrality=rank(centrality),rdensity=rank(density),label=label_cluster,color=color)
+ 
+  meandens=mean(df$rdensity)
+  meancentr=mean(df$rcentrality)
+  rangex=max(c(meancentr-min(df$rcentrality),max(df$rcentrality)-meancentr))
+  rangey=max(c(meandens-min(df$rdensity),max(df$rdensity)-meandens))
+  
   df$name=unlist(labels)
   df=df[order(df$label),]
   df_lab <- df_lab[df_lab$sC>=minfreq,]
@@ -144,7 +152,7 @@ thematicMap <- function(M, field="ID", n=250, minfreq=5, stemming=FALSE, size=0.
   
   df$freq=A[,2]
   
-  W <- df_lab %>% group_by(.data$groups) %>% dplyr::filter(.data$sC>1) %>% 
+  W <- df_lab %>% group_by(.data$groups) %>% #dplyr::filter(.data$sC>1) %>% 
     arrange(-.data$sC, .by_group = TRUE) %>% 
     dplyr::top_n(10, .data$sC) %>%
     summarise(wordlist = paste(.data$words,.data$sC,collapse="\n")) %>% as.data.frame()
@@ -153,6 +161,14 @@ thematicMap <- function(M, field="ID", n=250, minfreq=5, stemming=FALSE, size=0.
   
   ### number of labels for each cluster
   labels=gsub("\\d", "",df$words)
+  
+  ### cut ties over 10 words
+  df$words <- unlist(lapply(df$words, function(l){
+    l <- unlist(strsplit(l,"\\\n"))
+    l <- l[1:(min(length(l),10))]
+    l <- paste0(l,collapse="\n")
+  }))
+  
   L=unlist(lapply(labels, function(l){
     l=strsplit(l," \\\n")
     l=paste(l[[1]][1:min(n.labels,lengths(l))], collapse="\n")
@@ -160,24 +176,32 @@ thematicMap <- function(M, field="ID", n=250, minfreq=5, stemming=FALSE, size=0.
   df$name_full=L
   ###
   
-  
-  meandens=mean(df$rdensity)
-  meancentr=mean(df$rcentrality)
+  #meandens <- 0
+  #meancentr <- 0
+  #meandens=mean(df$rdensity)
+  #meancentr=mean(df$rcentrality)
   #df=df[df$freq>=minfreq,]
   
-  rangex=max(c(meancentr-min(df$rcentrality),max(df$rcentrality)-meancentr))
-  rangey=max(c(meandens-min(df$rdensity),max(df$rdensity)-meandens))
-  xlimits=c(meancentr-rangex,meancentr+rangex)
-  ylimits=c(meandens-rangey,meandens+rangey)
+  #rangex=max(c(meancentr-min(df$rcentrality),max(df$rcentrality)-meancentr))
+  #rangey=max(c(meandens-min(df$rdensity),max(df$rdensity)-meandens))
+  xlimits=c(meancentr-rangex-0.5,meancentr+rangex+0.5)
+  ylimits=c(meandens-rangey-0.5,meandens+rangey+0.5)
   
- #quadrant_names=rep(" ",4) ## empty tooltips for quadrant names
 
-  g=ggplot(df, aes(x=df$rcentrality, y=df$rdensity, text=(df$words))) +
-    geom_point(group="NA",aes(size=log(as.numeric(df$freq))),shape=20,col=adjustcolor(df$color,alpha.f=0.5))     # Use hollow circles
+  annotations <- data.frame(
+    xpos = sort(c(xlimits,xlimits)),
+    ypos = c(ylimits, ylimits),
+    words = c("Emerging or\nDeclining Themes","Niche Themes","Basic Themes ","Motor Themes "),
+    hjustvar = c(0,0,1,1) ,
+    vjustvar = c(0,1.0,0,1))
+  
+
+  g=ggplot(df, aes(x=.data$rcentrality, y=.data$rdensity, text=c(.data$words))) +
+    geom_point(group="NA",aes(size=log(as.numeric(.data$freq))),shape=20,col=adjustcolor(df$color,alpha.f=0.5))     # Use hollow circles
   if (size>0){
     if (isTRUE(repel)){
-      g=g+geom_label_repel(aes(group="NA",label=ifelse(df$freq>1,unlist(tolower(df$name_full)),'')),size=3*(1+size),angle=0)}else{
-      g=g+geom_text(aes(group="NA",label=ifelse(df$freq>1,unlist(tolower(df$name_full)),'')),size=3*(1+size),angle=0)
+      g=g+geom_label_repel(aes(group="NA",label=ifelse(.data$freq>1,unlist(tolower(.data$name_full)),'')),size=3*(1+size),angle=0)}else{
+      g=g+geom_text(aes(group="NA",label=ifelse(.data$freq>1,unlist(tolower(.data$name_full)),'')),size=3*(1+size),angle=0)
     }
   }
   
@@ -185,14 +209,12 @@ thematicMap <- function(M, field="ID", n=250, minfreq=5, stemming=FALSE, size=0.
     geom_vline(xintercept = meancentr,linetype=2, color=adjustcolor("black",alpha.f=0.7)) + 
       theme(legend.position="none") +
     scale_radius(range=c(5*(1+size), 30*(1+size)))+
-      labs(x = "Centrality", y = "Density")+
+      labs(x = "Relevance degree\n(Centrality)", y = "Development degree\n(Density)")+
       xlim(xlimits)+
       ylim(ylimits)+
-      #geom_text(x=xlimits[1]+0.5, y=ylimits[2], label="Niche Themes", color=adjustcolor("gray20", alpha.f=0.2),hjust = 0)+
-      #geom_text(x=xlimits[2]-1, y=ylimits[2], label="Motor Themes", color=adjustcolor("gray20", alpha.f=0.2),hjust = 0)+
-      #geom_text(x=xlimits[2]-1, y=ylimits[1], label="Basic or\nTransversal Themes", color=adjustcolor("gray20", alpha.f=0.2),hjust = 0)+
-      #geom_text(x=xlimits[1]+1, y=ylimits[1], label="Emerging or\nDeclining Themes", color=adjustcolor("gray20", alpha.f=0.2),hjust = 0)+
-    theme(axis.text.x=element_blank(),
+      annotate("text",x=annotations$xpos,y= annotations$ypos,hjust=annotations$hjustvar,
+                                         vjust=annotations$vjustvar,label=annotations$words, color=adjustcolor("gray20", alpha.f=0.5),size=3*(1+size))+
+      theme(axis.text.x=element_blank(),
         axis.ticks.x=element_blank(),
         axis.text.y=element_blank(),
         axis.ticks.y=element_blank())

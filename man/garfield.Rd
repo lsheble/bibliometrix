@@ -3,7 +3,8 @@
 \name{garfield}
 \alias{garfield}
 \title{Eugene Garfield's manuscripts.}
-\format{A data frame with 147 rows and 15 variables:
+\format{
+A data frame with 147 rows and 15 variables:
 \describe{
 \item{AU}{Authors}
 \item{TI}{Document Title}
@@ -20,12 +21,13 @@
 \item{PY}{Year}
 \item{UT}{Unique Article Identifier}
 \item{DB}{Database}
-}}
+}
+}
 \source{
-\url{http://www.scopus.com}
+\url{https://www.scopus.com}
 }
 \description{
 All manuscripts published by Eugene Garfield.\cr
 Period: 1954 - 2014\cr
-Database: \href{http://www.scopus.com}{SCOPUS source}\cr
+Database: \href{https://www.scopus.com}{SCOPUS source}\cr
 }

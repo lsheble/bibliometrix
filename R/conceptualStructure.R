@@ -26,7 +26,7 @@
 #' @param labelsize is an integer. It indicates the label size in the plot. Default is \code{labelsize=10}
 #' @param quali.supp is a vector indicating the indexes of the categorical supplementary variables. It is used only for CA and MCA.
 #' @param quanti.supp is a vector indicating the indexes of the quantitative supplementary variables. It is used only for CA and MCA.
-#' @param documents is an integer. It indicates the number of documents to plot in the factorial map. The default value is 10. It is used only for CA and MCA.
+#' @param documents is an integer. It indicates the number of documents per cluster to plot in the factorial map. The default value is 2. It is used only for CA and MCA.
 #' @param graph is logical. If TRUE the function plots the maps otherwise they are saved in the output object. Default value is TRUE
 #' @return It is an object of the class \code{list} containing the following components:
 #'
@@ -53,7 +53,7 @@
 #' @seealso \code{\link{biblioAnalysis}} to perform a bibliometric analysis.
 #' 
 #' @export
-conceptualStructure<-function(M,field="ID", method="MCA", quali.supp=NULL, quanti.supp=NULL, minDegree=2, clust="auto", k.max=5, stemming=FALSE, labelsize=10,documents=10, graph=TRUE){
+conceptualStructure<-function(M,field="ID", method="MCA", quali.supp=NULL, quanti.supp=NULL, minDegree=2, clust="auto", k.max=5, stemming=FALSE, labelsize=10,documents=2, graph=TRUE){
   
   #cbPalette <- c("#999999", "#E69F00", "#56B4E9", "#009E73", "#F0E442", "#0072B2", "#D55E00", "#CC79A7")
   cbPalette <- c(brewer.pal(9, 'Set1')[-6], brewer.pal(8, 'Set2')[-7], brewer.pal(12, 'Paired')[-11],brewer.pal(12, 'Set3')[-c(2,8,12)])
@@ -201,8 +201,15 @@ conceptualStructure<-function(M,field="ID", method="MCA", quali.supp=NULL, quant
     scale_fill_manual(values = cbPalette[1:clust]) +
     labs(title= paste("Conceptual Structure Map - method: ",method,collapse="",sep="")) +
     geom_point() +
-    theme(text = element_text(size=labelsize),axis.title=element_text(size=labelsize,face="bold"),
-          plot.title=element_text(size=labelsize+1,face="bold"))
+    geom_hline(yintercept=0, linetype="dashed", color = adjustcolor("grey40",alpha.f = 0.7))+
+    geom_vline(xintercept=0, linetype="dashed", color = adjustcolor("grey40",alpha.f = 0.7))+
+    theme(panel.border =  element_rect(fill=NA, size = 0.3, linetype = 'dashed', colour = adjustcolor("gray60",alpha.f = 0.7)),
+          text = element_text(size=labelsize),
+          axis.title=element_text(size=labelsize,face="bold"),
+          plot.title=element_text(size=labelsize+1,face="bold"),
+          panel.background = element_rect(fill = "white", colour = "white"),
+          panel.grid.major = element_line(size = 0.3, linetype = 'dashed', colour = adjustcolor("gray60",alpha.f = 0.7)),
+          panel.grid.minor = element_blank())
    if (method!="MDS"){
      b=b+xlab(paste("Dim 1 (",round(res.mca$eigCorr$perc[1],2),"%)",sep=""))+
        ylab(paste("Dim 2 (",round(res.mca$eigCorr$perc[2],2),"%)",sep=""))
@@ -251,6 +258,7 @@ conceptualStructure<-function(M,field="ID", method="MCA", quali.supp=NULL, quant
   if (method !="MDS"){
   ## Factorial map of most contributing documents
   
+    
   if (documents>dim(docCoord)[1]){documents=dim(docCoord)[1]}
     
     centers=data.frame(dim1=km.res$centers[,1],dim2=km.res$centers[,2])
@@ -260,8 +268,19 @@ conceptualStructure<-function(M,field="ID", method="MCA", quali.supp=NULL, quant
     #A=docCoord[,1:2]
     A=euclDist(docCoord[,1:2],centers)
     docCoord$Cluster=A$color
-    A=A[1:documents,]
+    #A=A[1:documents,]
     A$color=cbPalette[A$color]
+    
+    A$contrib <- docCoord$contrib
+    A <- A %>%
+      mutate(names=row.names(A)) %>%
+      group_by(.data$color) %>%
+      top_n(.data$contrib,n=documents) %>%
+      select(!"contrib")%>%
+      as.data.frame() 
+    
+    row.names(A) <- A$names
+    A <- A[,-4]
     
     names(centers)=names(A)
     A=rbind(A,centers)
@@ -275,21 +294,22 @@ conceptualStructure<-function(M,field="ID", method="MCA", quali.supp=NULL, quant
     rangex=c(min(df_all[,1]),max(df_all[,1]))
     rangey=c(min(df_all[,2]),max(df_all[,2]))
 
-    b_doc=ggplot(aes(x=A$dim1,y=A$dim2,label=A$nomi),data=A)+
+    b_doc=ggplot(aes(x=.data$dim1,y=.data$dim2,label=.data$nomi),data=A)+
       geom_point(size = 2, color = A$color)+
       labs(title= "Factorial map of the documents with the highest contributes") +
       geom_label_repel(box.padding = unit(0.5, "lines"),size=(log(labelsize*3)), fontface = "bold", 
                        fill=adjustcolor(A$color,alpha.f=0.6), color = "white", segment.alpha=0.5, segment.color="gray")+
       scale_x_continuous(limits = rangex, breaks=seq(round(rangex[1]), round(rangex[2]), 1))+
       scale_y_continuous(limits = rangey, breaks=seq(round(rangey[1]), round(rangey[2]), 1))+
-      geom_hline(yintercept=0, linetype="dashed", color = adjustcolor("grey60",alpha.f = 0.7))+
-      geom_vline(xintercept=0, linetype="dashed", color = adjustcolor("grey60",alpha.f = 0.7))+
+      geom_hline(yintercept=0, linetype="dashed", color = adjustcolor("grey40",alpha.f = 0.7))+
+      geom_vline(xintercept=0, linetype="dashed", color = adjustcolor("grey40",alpha.f = 0.7))+
       theme(plot.title=element_text(size=labelsize+1,face="bold"), 
             axis.title=element_text(size=labelsize,face="bold") ,
-            panel.background = element_rect(fill = "lavenderblush",
-                                            colour = "lavenderblush"),
+            panel.border =  element_rect(fill=NA, size = 0.3, linetype = 'dashed', colour = adjustcolor("gray60",alpha.f = 0.7)),
+            panel.background = element_rect(fill = "white",
+                                            colour = "white"),
             #size = 1, linetype = "solid"),
-            panel.grid.major = element_line(size = 1, linetype = 'solid', colour = "white"),
+            panel.grid.major = element_line(size = 0.3, linetype = 'dashed', colour = adjustcolor("gray90",alpha.f = 0.7)),
             panel.grid.minor = element_blank())
     
     if (method!="MDS"){
@@ -297,13 +317,24 @@ conceptualStructure<-function(M,field="ID", method="MCA", quali.supp=NULL, quant
         ylab(paste("Dim 2 (",round(res.mca$eigCorr$perc[2],2),"%)",sep=""))
     }else{b_doc=b_doc+xlab("Dim 1")+ylab("Dim 2")}
       
-    if (isTRUE(graph)){plot(b_doc)}
+    if (isTRUE(graph)){(plot(b_doc))}
     
     ## Factorial map of the most cited documents
     docCoord=docCoord[order(-docCoord$TC),]
-    B=docCoord[1:documents,1:2]
-    B=euclDist(B,centers)
+    #B=docCoord[1:documents,1:2]
+    B=euclDist(docCoord[,1:2],centers)
     B$color=cbPalette[B$color]
+    
+    B$TC <- docCoord$TC
+    B <- B %>%
+      mutate(names=row.names(B)) %>%
+      group_by(.data$color) %>%
+      top_n(.data$TC,n=documents) %>%
+      select(!"TC")%>%
+      as.data.frame() 
+    
+    row.names(B) <- B$names
+    B <- B[,-4]
     B=rbind(B,centers)
     x=B$dim1
     y=B$dim2
@@ -313,7 +344,7 @@ conceptualStructure<-function(M,field="ID", method="MCA", quali.supp=NULL, quant
     rangex=c(min(df_all_TC[,1]),max(df_all_TC[,1]))
     rangey=c(min(df_all_TC[,2]),max(df_all_TC[,2]))
     
-    b_doc_TC=ggplot(aes(x=B$dim1,y=B$dim2,label=B$nomi),data=B)+
+    b_doc_TC=ggplot(aes(x=.data$dim1,y=.data$dim2,label=.data$nomi),data=B)+
       geom_point(size = 2, color = B$color)+
       labs(title= "Factorial map of the most cited documents") +
       geom_label_repel(box.padding = unit(0.5, "lines"),size=(log(labelsize*3)), fontface = "bold", 
@@ -326,10 +357,9 @@ conceptualStructure<-function(M,field="ID", method="MCA", quali.supp=NULL, quant
       geom_vline(xintercept=0, linetype="dashed", color = adjustcolor("grey60",alpha.f = 0.7))+
       theme(plot.title=element_text(size=labelsize+1,face="bold"), 
             axis.title=element_text(size=labelsize,face="bold") ,
-            panel.background = element_rect(fill = "lavenderblush",
-                                          colour = "lavenderblush"),
-                                            #size = 1, linetype = "solid"),
-           panel.grid.major = element_line(size = 1, linetype = 'solid', colour = "white"),
+            panel.border =  element_rect(fill=NA, size = 0.3, linetype = 'dashed', colour = adjustcolor("gray60",alpha.f = 0.7)),
+            panel.background = element_rect(fill = "white", colour = "white"),
+           panel.grid.major = element_line(size = 0.3, linetype = 'dashed', colour = adjustcolor("gray90",alpha.f = 0.7)),
            panel.grid.minor = element_blank())
       
     

@@ -36,7 +36,7 @@
 rpys <- function(M, sep=";", timespan=NULL, graph=T){
 
   
-  M$CR<-stringr::str_replace_all(as.character(M$CR),"DOI;","DOI ")
+  M$CR<-gsub("DOI;","DOI ", as.character(M$CR))
   
   Fi<-strsplit(M[,"CR"],sep)
   Fi<-lapply(Fi,trim.leading)
@@ -106,11 +106,11 @@ if (length(timespan)==2){
 }
 df=data.frame(X=X,Y=Y,diffMedian=diffMedian,stringsAsFactors = FALSE)
 RPYS=data.frame(Year=names(Y),Citations=Y,diffMedian5=diffMedian)
-g=ggplot(df, aes(x=df$X,y=df$Y,text=paste("Year: ",df$X,"\nN. of References: ",df$Y)))+
+g=ggplot(df, aes(x=.data$X,y=.data$Y,text=paste("Year: ",.data$X,"\nN. of References: ",.data$Y)))+
   geom_line(aes(group="NA")) +
   geom_area(aes(group="NA"),fill = '#002F80', alpha = .5) +
   geom_hline(aes(yintercept=0, color = 'grey'))+
-  geom_line(aes(x=df$X,y=df$diffMedian, color="firebrick", group="NA"))+
+  geom_line(aes(x=.data$X,y=.data$diffMedian, color="firebrick", group="NA"))+
   labs(x = 'Year'
        , y = 'Cited References'
        , title = "Reference Publication Year Spectroscopy",
@@ -126,11 +126,11 @@ g=ggplot(df, aes(x=df$X,y=df$Y,text=paste("Year: ",df$X,"\nN. of References: ",d
         ,axis.title = element_text(size = 14, color = '#555555')
         ,axis.title.y = element_text(vjust = 1, angle = 90)
         ,axis.title.x = element_text(hjust = 0.95, angle = 0)
-        ,axis.text.x = element_text(size=10)
+        ,axis.text.x = element_text(size=8,angle = 90)
   )
 
 if (isTRUE(graph)){plot(g)}
-    
+    CR$Reference <- reduceRefs(CR$Reference)
     result=list(spectroscopy=g, rpysTable=RPYS, CR=CR)
     return(result)
 }
@@ -153,4 +153,13 @@ yearExtract <- function(string,db){
     y=substr(y,2,5)
   }
   return(y)
+}
+
+reduceRefs<- function(A){
+  
+  ind=unlist(regexec("*V[0-9]", A))
+  A[ind>-1]=substr(A[ind>-1],1,(ind[ind>-1]-1))
+  ind=unlist(regexec("*DOI ", A))
+  A[ind>-1]=substr(A[ind>-1],1,(ind[ind>-1]-1))
+  return(A)
 }

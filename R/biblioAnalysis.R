@@ -36,9 +36,9 @@
 #'
 #'
 #' @examples
-#' data(scientometrics)
+#' data(management)
 #'
-#' results <- biblioAnalysis(scientometrics)
+#' results <- biblioAnalysis(management)
 #'
 #' summary(results, k = 10, pause = FALSE)
 #'
@@ -107,16 +107,27 @@ if ("TC" %in% Tags){
   PY=as.numeric(M$PY)
   CurrentYear=as.numeric(format(Sys.Date(),"%Y"))
   TCperYear=TC/(CurrentYear-PY+1)
-  MostCitedPapers=data.frame(M$SR,TC,TCperYear)
-  MostCitedPapers=MostCitedPapers[order(TC,decreasing=TRUE),]
-  names(MostCitedPapers)=c("Paper         ","TC","TCperYear")
+  if (!("DI" %in% names(M))) M$DI <- ""
+  MostCitedPapers <- data.frame(M$SR,M$DI,TC,TCperYear,PY) %>%
+    group_by(.data$PY) %>%
+    mutate(NTC = .data$TC/mean(.data$TC)) %>%
+    ungroup() %>% 
+    select(-.data$PY) %>%
+    arrange(desc(.data$TC)) %>%
+    as.data.frame()
+
+  names(MostCitedPapers)=c("Paper         ","DOI","TC","TCperYear","NTC")
 }
 
 # References
-#if ("CR" %in% Tags){CR=tableTag(M,"CR",sep)}
+nReferences <- 0
+if ("CR" %in% Tags){
+  CR <- tableTag(M,"CR",sep)
+  nReferences <- length(CR)
+  }
 
 # ID Keywords
-if ("ID" %in% Tags){ID=tableTag(M,"ID",sep)}
+if ("ID" %in% Tags){ID <- tableTag(M,"ID",sep)}
 
 # DE Keywords
 if ("DE" %in% Tags){DE=tableTag(M,"DE",sep)}
@@ -193,6 +204,7 @@ results=list(Articles=dim(M)[1],             # Articles
              DE=DE,                          # Keywords
              ID=ID,                          # Authors' keywords
              Documents=Documents,
+             nReferences = nReferences,      # N. of References
              DB=M$DB[1])
   class(results)<-"bibliometrix"
 
